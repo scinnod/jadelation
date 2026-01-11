@@ -1,76 +1,150 @@
-# Generated from hgignore - ignore files for Git
+# Generated from hgignore - Ignore files for Git
+# Follows best practices: explicit .gitignore tracking, .gitkeep for dirs, consistent patterns
 
-# Ignore Python bytecode and cache files
+# ========================
+# Python
+# ========================
 *.pyc
 *.pyo
 *.pyd
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+*$py.class
+__pycache__/
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
 
-# Ignore Python distribution and packaging metadata
-*.egg-info
+# ========================
+# Django
+# ========================
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+static/
+staticfiles/
 
-# Ignore translation files
+# ========================
+# Environment Variables
+# ========================
+.env
+.env.local
+.env.*.local
+*.env~
+env/itsm.env
+
+# ========================
+# IDEs
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+\#*\#
+.DS_Store
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# Testing
+# ========================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ========================
+# Database dumps
+# ========================
+*.sql.gz
+*.dump
+
+# ========================
+# Secrets
+# ========================
+/secrets/
+
+# ========================
+# User-specific files
+# ========================
+# Top-level user_files/ is completely excluded (organization-specific data)
+# apps/itsm/user_files/ contains dummy data and is tracked in the repository
+user_files/
+
+# ========================
+# Backups
+# ========================
+*.bak
+*~
+\#*\#
+
+# ========================
+# LaTeX temporary files
+# ========================
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+
+# ========================
+# Translations
+# ========================
+*.mo
 *.pot
 
-# Ignore temporary and backup files
-*~
-\#*
-.*.swp
-.*.swo
-.*.backup
-.*.tmp
+# ========================
+# Virtual Environments
+# ========================
+venv/
+env/
+ENV/
+.venv
 
-# Ignore environment files (specifically deepl.env in env directory)
-env/deepl.env
+# ========================
+# macOS
+# ========================
+.DS_Store
+.AppleDouble
+.LSOverride
 
-# Ignore all files in . directory (except .gitignore itself)
-# Note: This will ignore all hidden files in root, but we'll explicitly allow .gitignore
-.*
+# ========================
+# Windows
+# ========================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Exclude specific directories or files (commented out as per your original)
-# db.*
+# ========================
+# Postgres dumps
+# ========================
+/postgres/dumps/*.sql
+!/postgres/dumps/.gitkeep
 
-# Explicitly allow .gitignore to be tracked (this is important!)
-!.gitignore
+# ========================
+# Nginx certificates
+# ========================
+# Example: if you have certs in nginx/certs/
+# nginx/certs/
+# or
+# *.crt
+# *.key
+# *.pem
 
-# But ignore the gitignore file itself in the repository
-# This ensures that the .gitignore file is not committed
-# However, since we're adding it to the repo, we need to be careful
-
-# Wait - you said "submitting gitignore itself to the repo"
-# So we should NOT ignore .gitignore, but we DO want to ignore other . files
-
-# Correct approach: Ignore all hidden files except .gitignore
-# This is the key: we want to ignore all . files except .gitignore
-
-# So let's restructure to be more precise:
-
-# Ignore all hidden files and directories except .gitignore
-# This is the correct way to handle it
-.*
-!.gitignore
-
-# But also explicitly ignore the specific files and patterns from hgignore
-*.orig
-*.egg-info
-*.pot
-*.py[co]
-__pycache__
-*~
-\#*
-.*.swp
-.*.swo
-.*.backup
-.*.tmp
-
-# Ignore env/deepl.env specifically
-env/deepl.env
-
-# Ignore db.* files (commented out as per original)
-# db.*
-
+# ========================
 # Explicitly allow .gitignore to be tracked
+# ========================
+!.gitignore
+
+# ========================
+# Optional: Ignore all other hidden files except .gitignore
+# ========================
+.*
 !.gitignore
