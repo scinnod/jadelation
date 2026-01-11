@@ -1,0 +1,119 @@
+# ==============================================================================
+# Docker Compose Configuration for DeepL Translation Frontend
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # Nginx Reverse Proxy (Internal)
+  # ============================================================================
+  # Handles static files and proxies to Django app
+  # External nginx proxy manager should connect to http://deepl-nginx:8000
+  # via the shared 'deepl_backend' Docker network
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: deepl_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/mime.types:/etc/nginx/mime.types:ro
+      - ./nginx/proxy_params:/etc/nginx/proxy_params:ro
+      - staticfiles:/app/staticfiles:ro  # Serve static files
+    networks:
+      - deepl_backend  # External network for nginx proxy manager
+      - app_deepl_private
+    depends_on:
+      - deepl
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # DeepL Translation Application
+  # ============================================================================
+  deepl:
+    build:
+      context: ./apps/deepl
+      dockerfile: Dockerfile
+    container_name: deepl_app
+    volumes:
+      # Application code (for development - remove in production)
+      # - ./apps/deepl:/app
+      
+      # User-editable content
+      # Customize the 'About' section by editing markdown files in ./data/about/
+      # Files: about_en.md, about_de.md (add about_XX.md for other languages)
+      - ./user_files/about:/app/data/about
+      
+      # User-defined logo
+      - ./user_files/logo:/app/static/logo
+      # Persistent data volumes (managed by Docker)
+      # To customize paths, modify these volume mounts:
+      - secrets:/secrets                  # Secret key storage (outside app dir)
+      - database:/app/data/db             # SQLite database
+      - logs:/app/logs                    # Application logs
+      - staticfiles:/app/staticfiles      # Static files
+    env_file:
+      - env/deepl.env
+    environment:
+      # Override secret key to read from file (stored outside app directory)
+      - SECRET_KEY_FILE=/secrets/django_secret_key
+      # Gunicorn configuration
+      - GUNICORN_WORKERS=3
+      - GUNICORN_TIMEOUT=120
+      - GUNICORN_LOG_LEVEL=info
+    networks:
+      - app_deepl_private
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+# ==============================================================================
+# Docker Volumes
+# ==============================================================================
+volumes:
+  secrets:
+    name: deepl_secrets
+    driver: local
+  database:
+    name: deepl_database
+    driver: local
+  logs:
+    name: deepl_logs
+    driver: local
+  staticfiles:
+    name: deepl_staticfiles
+    driver: local
+
+# ==============================================================================
+# Docker Networks
+# ==============================================================================
+# Setup instructions:
+# 1. Create the shared proxy network: docker network create proxy
+# 2. Connect your nginx proxy manager container to the 'proxy' network
+# 3. Configure upstream to: http://deepl-nginx:8000
+networks:
+  deepl_backend:
+    external: true  # Shared network - must be created manually before starting
+  app_deepl_private:
+    name: deepl_private
+    driver: bridge
+    internal: false  # Set to true if app doesn't need internet access

@@ -1,0 +1,98 @@
+<!doctype html>
+{# Base template for Jade DeepL Frontend application #}
+
+{# Load required template tags #}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load custom_helper_tags %}
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    {# Page title - can be overridden in child templates #}
+    {% block title %}
+      <title>{{ APP_TITLE }}</title>
+    {% endblock title %}
+    
+    {# Bootstrap CSS - served locally for privacy #}
+    <link href="{% static 'deeplFrontend/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  </head>
+
+  <body>
+    <div class="container p-3 mt-3">
+      
+      {# Logo section - displayed if LOGO_FILENAME is configured #}
+      {% if LOGO_FILENAME %}
+        {# Mobile-only logo (hidden on medium+ screens) #}
+        <div class="d-md-none mb-4">
+          <img src="{% static 'logo/' %}{{ LOGO_FILENAME }}" 
+               class="float-end img-fluid" 
+               alt="Logo" 
+               style="max-width: {{ LOGO_MAX_WIDTH }}px;">
+        </div>
+        
+        {# Desktop logo (hidden on small screens) #}
+        <div class="d-none d-md-block mb-3">
+          <img src="{% static 'logo/' %}{{ LOGO_FILENAME }}" 
+               class="float-end img-fluid" 
+               alt="Logo" 
+               style="max-width: {{ LOGO_MAX_WIDTH }}px;">
+        </div>
+      {% endif %}
+      
+      {# Main content area - overridden by child templates #}
+      {% block content %}{% endblock content %}
+
+      {# Footer with copyright, navigation links, and language switcher #}
+      <div class="pt-4 text-secondary">
+        <small>
+          {# Footer text with dynamic year and optional organization name #}
+          {% if ORGANIZATION_NAME %}
+            {{ FOOTER_TEXT|safe }} by {{ ORGANIZATION_NAME }}
+          {% else %}
+            {{ FOOTER_TEXT|safe }}
+          {% endif %}
+          
+          <span class="px-1">|</span>
+          
+          {# Usage statistics links with different granularities #}
+          {% translate "usage statistics" %}:
+          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='d' %}">
+            {% translate "daily" %}
+          </a>-
+          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='m' %}">
+            {% translate "monthly" %}
+          </a>-
+          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='y' %}">
+            {% translate "annually" %}
+          </a>
+          
+          <span class="px-1">|</span>
+          
+          {# Language switcher - only shown if multiple languages available #}
+          {% get_available_languages as LANGUAGES %}
+          {% if LANGUAGES|length > 1 %}
+            {% get_current_language as CURRENT_LANGUAGE %}
+            {% for lang_code, lang_name in LANGUAGES %}
+              {% if lang_code != CURRENT_LANGUAGE %}
+                <a class="link-secondary" href="{% change_lang lang_code %}">{{ lang_code }}</a>
+              {% else %}
+                <a class="link-secondary text-decoration-none fw-bold" href="{% change_lang lang_code %}">{{ lang_code }}</a>
+              {% endif %}
+              {% if not forloop.last %}/{% endif %}
+            {% endfor %}
+          {% endif %}
+        </small>
+      </div>
+    </div>
+
+    {# Bootstrap JavaScript bundle - served locally for privacy #}
+    <script src="{% static 'deeplFrontend/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+    
+    {# Additional scripts block - can be extended in child templates #}
+    {% block scripts %}{% endblock scripts %}
+  </body>
+</html>

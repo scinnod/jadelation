@@ -1,0 +1,101 @@
+{# Translation Frontend Template - Main interface for DeepL translation service #}
+{% extends "base.html" %}
+
+{# Load required template tags #}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load static %}
+{% load custom_helper_tags %}
+
+{% block content %}
+  {# Header section #}
+  <div>
+    <h4 class="pb-2">{{ APP_TITLE }}</h4>
+    <div class="mb-4 text-secondary fst-italic">
+      {% translate "Enterprise DeepL API access with enhanced privacy." %}
+    </div>
+  </div>
+
+  {# Translation form #}
+  <form method="post">
+    {% csrf_token %}
+    
+    {# Translation direction selector #}
+    <div class="row">
+      <div class="col-12 col-lg-6 ps-0">
+        {{ form.directionChoice | as_crispy_field }}
+      </div>
+    </div>
+    
+    {# Source and target text areas #}
+    <div class="row">
+      {# Source text input column #}
+      <div class="col-12 col-lg-6 mb-4">
+        {{ form.sourceText | as_crispy_field }}
+        <input class="btn btn-primary" 
+               type="submit" 
+               id="submit-btn" 
+               value="{% translate 'Submit (Ctrl+Enter)' %}">
+      </div>
+      
+      {# Translated text output column #}
+      <div class="col-12 col-lg-6">
+        {{ form.translatedText | as_crispy_field }}
+        <button class="btn btn-outline-primary" 
+                id="copy-btn" 
+                type="button">
+          {% translate "Copy translation to clipboard" %}
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {# Display usage information if available #}
+  {% if usage %}
+    <div class="pt-2 text-secondary">
+      <small>
+        <em>{{ usage }}</em>
+      </small>
+    </div>
+  {% endif %}
+
+  {# About section - loaded from markdown files #}
+  <h6 class="pt-5">{% translate "About this service" %}</h6>
+  <div class="fw-light">
+    {% load_about_content %}
+  </div>
+{% endblock content %}
+
+{% block scripts %}
+  {# jQuery library - served locally for privacy #}
+  <script src="{% static 'deeplFrontend/jquery/jquery-3.7.1.slim.min.js' %}"></script>
+  
+  {# Copy to clipboard functionality #}
+  <script>
+    $('#copy-btn').on('click', () => {
+      navigator.clipboard.writeText($('#id_translatedText').val()).then(function () {
+        // Success - no action needed
+      }, function () {
+        alert('{% translate "Failure when trying to copy to clipboard. Check permissions for clipboard. " %}');
+      });
+    });
+  </script>
+  
+  {# Auto-focus on source text field and move cursor to end #}
+  <script>
+    $(function () {
+      $("#id_sourceText").focus();
+      $("#id_sourceText").prop('selectionStart', $("#id_sourceText").val().length);
+    });
+  </script>
+  
+  {# Keyboard shortcut: Ctrl+Enter to submit form #}
+  <script>
+    $('#id_sourceText').keydown(function (e) {
+      if ((e.ctrlKey || e.metaKey) && (e.keyCode == 13 || e.keyCode == 10)) {
+        // Ctrl + Enter pressed
+        document.getElementById("submit-btn").click();
+      }
+    });
+  </script>
+{% endblock scripts %}

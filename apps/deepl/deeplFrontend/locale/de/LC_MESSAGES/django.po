@@ -1,0 +1,264 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-12-19 15:27+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: forms.py:7
+msgid "auto detection"
+msgstr "automatische Erkennung"
+
+#: forms.py:8
+msgid "German -> English"
+msgstr "Deutsch -> Englisch"
+
+#: forms.py:9
+msgid "English -> German (formal)"
+msgstr "Englisch -> Deutsch (formell)"
+
+#: forms.py:10
+msgid "English -> German (less formal)"
+msgstr "Englisch -> Deutsch (informell)"
+
+#: forms.py:12
+msgid "Text for translation"
+msgstr "Text zur Übersetzung"
+
+#: forms.py:13
+msgid "Direction of translation"
+msgstr "Übersetzungsrichtung"
+
+#: forms.py:18
+msgid "DeepL translation"
+msgstr "DeepL Übersetzung"
+
+#: models.py:20
+msgid "Time stamp"
+msgstr "Zeitstempel"
+
+#: models.py:23
+msgid "Characters sent to DeepL for translation"
+msgstr "An DeepL zur Übersetzung übertragene Zeichen"
+
+#: models.py:27
+msgid "Direction of Translation after auto detection"
+msgstr "Übersetzungsrichtung nach automatischer Erkennung"
+
+#: models.py:30
+msgid "Auto detection of language used?"
+msgstr "Automatische Erkennung der Sprache verwendet?"
+
+#: models.py:34
+msgid "Translation"
+msgstr "Übersetzung"
+
+#: models.py:35
+msgid "Translations"
+msgstr "Übersetzungen"
+
+#: models.py:56
+msgid "DeepL Glossary ID"
+msgstr "DeepL Glossary ID"
+
+#: models.py:57
+msgid "The unique identifier returned by DeepL API"
+msgstr "Unique Identifier der DeepL API"
+
+#: models.py:61
+msgid "Glossary Name"
+msgstr "Name des Glossarys"
+
+#: models.py:62
+msgid "Human-readable name for the glossary"
+msgstr "Menschen-lesbarer Name für Glossary"
+
+#: models.py:66
+msgid "Source Language"
+msgstr "Quellsprache"
+
+#: models.py:67
+msgid "Source language code (e.g., DE, EN)"
+msgstr "Quellsprachen-Code (z.B. DE, EN)"
+
+#: models.py:71
+msgid "Target Language"
+msgstr "Zielsprache"
+
+#: models.py:72
+msgid "Target language code (e.g., EN-GB, DE)"
+msgstr "Zielsprachen-Code (z.B. EN-GB, DE)"
+
+#: models.py:76
+msgid "Upload Date"
+msgstr "Upload-Datum"
+
+#: models.py:77
+msgid "When the glossary was uploaded to DeepL"
+msgstr "Zeitpunkt des Uploads zu DeepL"
+
+#: models.py:81
+msgid "Original Filename"
+msgstr "Ursprünglicher Dateiname"
+
+#: models.py:82
+msgid "The original CSV filename"
+msgstr "Der ursprüngliche CSV-Dateiname"
+
+#: models.py:87
+msgid "Comment"
+msgstr "Kommentar"
+
+#: models.py:88
+msgid "Optional description or notes about this glossary"
+msgstr "Optionale Beschreibung oder Notizen zu diesem Glossar"
+
+#: models.py:92
+msgid "Entry Count"
+msgstr "Anzahl der Einträge"
+
+#: models.py:93
+msgid "Number of entries in the glossary"
+msgstr "Anzahl der Einträge im Glossar"
+
+#: models.py:97
+msgid "Glossary"
+msgstr "Glossar"
+
+#: models.py:98
+msgid "Glossaries"
+msgstr "Glossare"
+
+#: templates/base.html:62
+msgid "usage statistics"
+msgstr "Nutzungsstatistiken"
+
+#: templates/base.html:64
+msgid "daily"
+msgstr "täglich"
+
+#: templates/base.html:67
+msgid "monthly"
+msgstr "monatlich"
+
+#: templates/base.html:70
+msgid "annually"
+msgstr "jährlich"
+
+#: templates/statistics_frontend.html:12
+msgid "Statistics"
+msgstr "Statistiken"
+
+#: templates/statistics_frontend.html:19
+msgid ""
+"Legend: <em>number of requests</em> (<em>number of characters used</em>)"
+msgstr ""
+"Legende: <em>Anzahl der Anfragen</em> (<em>Anzahl der verwendeten Zeichen</"
+"em>)"
+
+#: templates/statistics_frontend.html:28
+msgid "period"
+msgstr "Zeitraum"
+
+#: templates/statistics_frontend.html:31
+msgid "total"
+msgstr "insgesamt"
+
+#: templates/statistics_frontend.html:60
+msgid "back to translation frontend"
+msgstr "zurück zur Übersetzungsmaske"
+
+#: templates/translation_frontend.html:15
+msgid "Enterprise DeepL API access with enhanced privacy."
+msgstr "Enterprise DeepL API-Zugang mit verbessertem Datenschutz."
+
+#: templates/translation_frontend.html:38
+msgid "Submit (Ctrl+Enter)"
+msgstr "Absenden (Strg+Enter)"
+
+#: templates/translation_frontend.html:47
+msgid "Copy translation to clipboard"
+msgstr "Übersetzung in die Zwischenablage kopieren"
+
+#: templates/translation_frontend.html:63
+msgid "About this service"
+msgstr "Über diesen Service"
+
+#: templates/translation_frontend.html:79
+msgid ""
+"Failure when trying to copy to clipboard. Check permissions for clipboard. "
+msgstr ""
+"Fehler beim Kopieren in die Zwischenablage. Bitte Berechtigung für die "
+"Zwischenablage prüfen."
+
+#: views.py:111
+msgid ""
+"ERROR: Translation service configuration error. Please contact the "
+"administrator."
+msgstr ""
+"FEHLER: Konfigurationsfehler des Übersetzungsdienstes. Bitte kontaktieren "
+"Sie den Administrator."
+
+#: views.py:138 views.py:173
+msgid ""
+"ERROR: The API services at DeepL are currently unavailable. Please try again "
+"later."
+msgstr ""
+"FEHLER: Die API-Dienste bei DeepL sind derzeit nicht verfügbar. Bitte "
+"versuchen Sie es später noch einmal."
+
+#: views.py:145 views.py:180
+msgid "ERROR: An unexpected error occurred. Please try again later."
+msgstr "FEHLER: Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später noch einmal."
+
+#: views.py:184
+msgid ""
+"ERROR: Language recognition was not successful. Please provide a longer "
+"excerpt or specify the direction explicitly."
+msgstr ""
+"FEHLER: Automatische Erkennung der Sprache nicht erfolgreich. Bitte einen "
+"längeren Ausschnitt verwenden oder die Übersetzungsrichtung explizit "
+"auswählen."
+
+#: views.py:212 views.py:345
+#, python-brace-format
+msgid "Current total API character usage: {count} of {limit}."
+msgstr "Derzeitige Ausnutzung des API Zeichenlimits: {count} von {limit}."
+
+#: views.py:220 views.py:353
+msgid ""
+"Current total API character usage: not available due to connection issues."
+msgstr "Derzeitige Ausnutzung des API Zeichenlimits: nicht verfügbar aufgrund von Verbindungsproblemen."
+
+#: views.py:224 views.py:357
+msgid "Current total API character usage: not available."
+msgstr "Derzeitige Ausnutzung des API Zeichenlimits: nicht verfügbar."
+
+#: views.py:301
+msgid "Report of daily usage:"
+msgstr "Bericht über tägliche Nutzung:"
+
+#: views.py:313
+msgid "Report of monthly usage:"
+msgstr "Bericht über monatliche Nutzung:"
+
+#: views.py:325
+msgid "Report of annual usage:"
+msgstr "Bericht über jährliche Nutzung:"
+
+#: views.py:337
+msgid "Requested report not available."
+msgstr "Der angeforderte Bericht ist nicht verfügbar."

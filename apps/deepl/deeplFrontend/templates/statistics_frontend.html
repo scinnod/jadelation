@@ -1,0 +1,66 @@
+{# Statistics Frontend Template - Display usage statistics for DeepL translation service #}
+{% extends "base.html" %}
+
+{# Load required template tags #}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load static %}
+
+{% block content %}
+  {# Header section #}
+  <div>
+    <h4 class="pb-2">{{ APP_TITLE }} &#150; {% translate "Statistics" %}</h4>
+  </div>
+
+  {# Statistics table section #}
+  {% if granularity_title %}
+    <h5>{{ granularity_title }}</h5>
+    <div class="text-secondary">
+      {% translate "Legend: <em>number of requests</em> (<em>number of characters used</em>)" %}
+    </div>
+  {% endif %}
+
+  {# Display statistics table if data available #}
+  {% if statistics %}
+    <table class="table table-sm table-hover">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "period" %}</th>
+          <th scope="col">DE->EN</th>
+          <th scope="col">EN->DE</th>
+          <th scope="col">{% translate "total" %}</th>
+        </tr>
+      </thead>
+      <tbody class="table-group-divider">
+        {# Loop through statistics records #}
+        {% for r in statistics %}
+          <tr>
+            <td>{{ r.fdt|date:dformat }}</td>
+            <td>{{ r.deen }}</td>
+            <td>{{ r.ende }}</td>
+            <td>{{ r.total }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {# Display usage summary if available #}
+  {% if usage %}
+    <div class="pt-1 text-secondary">
+      <small>
+        <em>{{ usage }}</em>
+      </small>
+    </div>
+  {% endif %}
+
+  {# Back navigation link #}
+  <div class="pt-3">
+    <a class="icon-link icon-link-hover" href="{% url 'translation-form' %}">
+      {% translate "back to translation frontend" %}
+      <svg xmlns="http://www.w3.org/2000/svg" class="bi" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+      </svg>
+    </a>
+  </div>
+{% endblock content %}

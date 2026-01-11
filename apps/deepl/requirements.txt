@@ -1,0 +1,9 @@
+Django==4.2
+gunicorn
+django-crispy-forms==2.0
+crispy-bootstrap5==0.7
+pytz
+python-dateutil
+requests
+deepl
+markdown

@@ -1,0 +1,76 @@
+# Generated from hgignore - ignore files for Git
+
+# Ignore Python bytecode and cache files
+*.pyc
+*.pyo
+*.pyd
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Python distribution and packaging metadata
+*.egg-info
+
+# Ignore translation files
+*.pot
+
+# Ignore temporary and backup files
+*~
+\#*
+.*.swp
+.*.swo
+.*.backup
+.*.tmp
+
+# Ignore environment files (specifically deepl.env in env directory)
+env/deepl.env
+
+# Ignore all files in . directory (except .gitignore itself)
+# Note: This will ignore all hidden files in root, but we'll explicitly allow .gitignore
+.*
+
+# Exclude specific directories or files (commented out as per your original)
+# db.*
+
+# Explicitly allow .gitignore to be tracked (this is important!)
+!.gitignore
+
+# But ignore the gitignore file itself in the repository
+# This ensures that the .gitignore file is not committed
+# However, since we're adding it to the repo, we need to be careful
+
+# Wait - you said "submitting gitignore itself to the repo"
+# So we should NOT ignore .gitignore, but we DO want to ignore other . files
+
+# Correct approach: Ignore all hidden files except .gitignore
+# This is the key: we want to ignore all . files except .gitignore
+
+# So let's restructure to be more precise:
+
+# Ignore all hidden files and directories except .gitignore
+# This is the correct way to handle it
+.*
+!.gitignore
+
+# But also explicitly ignore the specific files and patterns from hgignore
+*.orig
+*.egg-info
+*.pot
+*.py[co]
+__pycache__
+*~
+\#*
+.*.swp
+.*.swo
+.*.backup
+.*.tmp
+
+# Ignore env/deepl.env specifically
+env/deepl.env
+
+# Ignore db.* files (commented out as per original)
+# db.*
+
+# Explicitly allow .gitignore to be tracked
+!.gitignore
