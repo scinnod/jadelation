@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
+-->
+
 # Contributing Guide
 
 Thank you for your interest in contributing to this project!
@@ -52,7 +57,9 @@ All user-facing text must be translatable:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under AGPL-3.0-or-later.
+By contributing, you agree that your contributions will be licensed under Apache-2.0.
+
+<!-- TODO: Verify contributor license agreement is appropriate for Apache-2.0 -->
 
 ## Contact
 

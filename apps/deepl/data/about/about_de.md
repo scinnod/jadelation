@@ -1,2 +1,7 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
+-->
+
 Dieser Service bietet einen einfachen Zugang zum Übersetzungsdienst DeepL über ein einzelnes *DeepL API Pro*-Abonnement. Im Gegensatz zu den kostenlosen Diensten von DeepL, z.B. auf der Website, werden Anfragen mit diesem kostenpflichtigen Abonnement sorgfältiger behandelt und nicht von DeepL zur Schulung von KI-Übersetzungsmodellen verwendet. Die Nutzung ist daher auch für die Übersetzung interner und personenbezogener Informationen möglich, die möglicherweise schützenswert sind.
 

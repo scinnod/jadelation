@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
+-->
+
 # Design Principles & Development Guidelines
 
 This document outlines the core design principles and development guidelines for this Django project. These principles should be followed by all developers and AI agents working on the codebase.

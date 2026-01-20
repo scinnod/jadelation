@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Django management command to upload a glossary to DeepL API.
 

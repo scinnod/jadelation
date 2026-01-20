@@ -1,6 +1,6 @@
 # DeepL Translation Frontend
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A privacy-focused web interface for the DeepL translation API, designed for institutional use with enhanced privacy controls and usage tracking.
 
@@ -356,9 +356,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0 or later** (AGPL-3.0-or-later).
+This project is licensed under the **Apache License 2.0**.
 
 See [LICENSE](LICENSE) for the full license text.
+
+See [NOTICE](NOTICE) for copyright notices and third-party dependency information.
 
 ## Credits
 
