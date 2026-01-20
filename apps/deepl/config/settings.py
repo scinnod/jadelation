@@ -84,7 +84,11 @@ STATISTICS_YEARS = int(os.getenv("STATISTICS_YEARS", "5"))
 
 # Allowed hosts - must be set for production
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
-if not DEBUG and not ALLOWED_HOSTS:
+# Always include localhost and 127.0.0.1 for Docker health checks
+for host in ["localhost", "127.0.0.1"]:
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+if not DEBUG and len(ALLOWED_HOSTS) <= 2:  # Only localhost and 127.0.0.1
     raise ValueError("DJANGO_ALLOWED_HOSTS must be set when DEBUG=False")
 
 # CSRF protection
