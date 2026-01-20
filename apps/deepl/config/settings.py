@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
 """
 Django settings for the DeepL Translation Frontend.
 
@@ -68,6 +70,11 @@ FOOTER_TEXT = os.getenv("FOOTER_TEXT", "{year}+ Translation Service")
 # Logo configuration
 LOGO_FILENAME = os.getenv("LOGO_FILENAME", "")  # Filename in static/logo/
 LOGO_MAX_WIDTH = int(os.getenv("LOGO_MAX_WIDTH", "250"))  # Maximum width in pixels
+
+# Corporate Identity - Colors (hex codes without #)
+# These colors are used throughout the UI for consistent branding
+PRIMARY_COLOR = os.getenv("PRIMARY_COLOR", "0d6efd")  # Default Bootstrap primary blue
+SECONDARY_COLOR = os.getenv("SECONDARY_COLOR", "6610f2")  # Default Bootstrap indigo
 
 # Translation settings
 TRANSLATION_DETECTION_LEN = int(os.getenv("TRANSLATION_DETECTION_LEN", "30"))

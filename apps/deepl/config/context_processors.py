@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
 """
 Context processors for DeepL Translation Frontend.
 
@@ -25,6 +27,8 @@ def app_settings(request):
         - FOOTER_TEXT: Footer text with {year} replaced by current year
         - LOGO_FILENAME: Logo filename (if configured)
         - LOGO_MAX_WIDTH: Maximum logo width in pixels
+        - PRIMARY_COLOR: Primary brand color (hex code without #)
+        - SECONDARY_COLOR: Secondary brand color (hex code without #)
     """
     # Get current language
     lang = get_language()
@@ -54,4 +58,6 @@ def app_settings(request):
         'FOOTER_TEXT': footer_text,
         'LOGO_FILENAME': settings.LOGO_FILENAME,
         'LOGO_MAX_WIDTH': settings.LOGO_MAX_WIDTH,
+        'PRIMARY_COLOR': settings.PRIMARY_COLOR,
+        'SECONDARY_COLOR': settings.SECONDARY_COLOR,
     }

@@ -1,6 +1,19 @@
 # DeepL Translation Frontend
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
 A privacy-focused web interface for the DeepL translation API, designed for institutional use with enhanced privacy controls and usage tracking.
+
+> ⚠️ **IMPORTANT SECURITY WARNING**
+> 
+> This service provides **unrestricted access to your DeepL API key**. Every translation request uses your API quota and incurs costs.
+> 
+> **NEVER expose this service to the public internet without authentication!**
+> 
+> - This service MUST be deployed behind an authentication proxy (e.g., [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack))
+> - Only authenticated users from your organization should have access
+> - Unauthorized access could result in significant API costs and quota exhaustion
+> - See the [Authentication](#authentication) section for proper deployment
 
 ## Overview
 
@@ -11,7 +24,34 @@ This Django-based application provides a user-friendly frontend for DeepL's ente
 - **Glossary Support**: Manage custom terminology glossaries via Django management commands
 - **Internationalization**: Support for multiple interface languages (English, German)
 - **Responsive Design**: Mobile-friendly interface using Bootstrap 5
+- **Corporate Identity**: Customizable colors and logo via environment variables
 - **Production-Ready**: Security hardened, Docker-ready, designed for nginx reverse proxy deployment
+
+## Authentication
+
+This service is designed to work behind the [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack) - a production-ready authentication gateway combining nginx, Keycloak SSO, and OAuth2-proxy.
+
+### Prerequisites
+
+1. Deploy the Edge-Auth Stack first
+2. Configure Keycloak realm and client
+3. Set up nginx virtual host (see edge-auth-stack documentation)
+
+### Authentication Pattern
+
+This service uses **Pattern B** authentication:
+- **All requests are authenticated at nginx level before reaching Django**
+- No Django-internal authentication implementation required
+- Users are already authenticated when requests reach Django (X-Remote-User header)
+- No `@login_required` decorators needed - nginx handles everything
+
+See the [Edge-Auth Stack Django Integration Guide](https://github.com/javidkl/jade-django-0-nginx-auth-stack/blob/main/docs/django-integration.md) for detailed configuration.
+
+### Running Without Authentication (Development)
+
+For local development without the auth stack:
+1. Set `DJANGO_DEBUG=True` in your env file
+2. Access the service directly at `http://localhost:8000`
 
 ## Features
 
@@ -79,10 +119,12 @@ Required settings:
 **Note**: `DJANGO_SECRET_KEY` is automatically generated on first run and stored securely in a Docker volume. No manual configuration needed!
 
 Optional branding:
-- `APP_TITLE`: Application title
-- `ORGANIZATION_NAME`: Your organization name (footer)
+- `APP_TITLE_EN`, `APP_TITLE_DE`: Application title (multilingual)
+- `ORGANIZATION_NAME_EN`, `ORGANIZATION_NAME_DE`: Your organization name (footer)
 - `FOOTER_TEXT`: Custom footer text
-- `LOGO_FILENAME`: Logo file in static/logo/ directory
+- `LOGO_FILENAME`: Logo file in user_files/logo/ directory
+- `PRIMARY_COLOR`: Primary brand color (hex without #, e.g., `0d6efd`)
+- `SECONDARY_COLOR`: Secondary brand color (hex without #, e.g., `6610f2`)
 
 ### 3. Add Logo (Optional)
 
@@ -158,20 +200,22 @@ Access at `http://127.0.0.1:8000`
 
 ## Production Deployment
 
+> ⚠️ **CRITICAL**: Before deploying to production, you MUST set up authentication. Deploy the [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack) first, then connect this service via the shared Docker network.
+
 ### Docker + Nginx Setup
 
-1. **Configure environment variables** in `env/deepl.env`:
+1. **Deploy Edge-Auth Stack first** (see [Authentication](#authentication) section)
+
+2. **Configure environment variables** in `env/deepl.env`:
    - Set `DJANGO_DEBUG=False`
    - Configure `DJANGO_ALLOWED_HOSTS`
-   - Set strong `DJANGO_SECRET_KEY`
    - Configure `CSRF_TRUSTED_ORIGINS`
+   - Note: `SECRET_KEY` is auto-generated - no manual configuration needed
 
-2. **Update nginx configuration** in `nginx/nginx.conf`:
-   - Set your domain name
-   - Configure SSL certificates (recommended)
+3. **Update nginx configuration** in `nginx/nginx.conf`:
    - Adjust rate limiting as needed
 
-3. **Deploy**:
+4. **Deploy**:
    ```bash
    docker-compose up -d
    ```
@@ -183,16 +227,18 @@ Access at `http://127.0.0.1:8000`
 
 ### Security Checklist
 
-- [ ] Set `DEBUG=False` in production
-- [ ] Use strong `SECRET_KEY` (50+ random characters)
-- [ ] Configure `ALLOWED_HOSTS` with your domain
-- [ ] Set up HTTPS with valid SSL certificates
-- [ ] Configure `CSRF_TRUSTED_ORIGINS` for your domain
-- [ ] Review and adjust `SECURE_*` settings in settings.py
-- [ ] Set up regular database backups
-- [ ] Configure log rotation for Django logs
-- [ ] Monitor DeepL API usage and quotas
-- [ ] Keep dependencies updated
+- [ ] **Authentication proxy deployed** (Edge-Auth Stack or equivalent)
+- [ ] Service NOT directly accessible from internet
+- [ ] `DEBUG=False` in production
+- [ ] `SECRET_KEY` auto-generated (don't set manually)
+- [ ] `ALLOWED_HOSTS` configured with your domain only
+- [ ] HTTPS enabled (on upstream proxy)
+- [ ] `CSRF_TRUSTED_ORIGINS` configured for your domain
+- [ ] `DEEPL_AUTHKEY` not in any committed files
+- [ ] Regular database backups configured
+- [ ] DeepL API usage monitoring enabled
+
+See [SECURITY.md](SECURITY.md) for detailed security guidance.
 
 ## Glossary Management
 
@@ -219,10 +265,13 @@ See `env/deepl.env.sample` for all available configuration options.
 
 Key settings:
 - **DeepL API**: `DEEPL_AUTHKEY`
-- **Django Security**: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`
-- **Branding**: `APP_TITLE`, `ORGANIZATION_NAME`, `FOOTER_TEXT`, `LOGO_FILENAME`
+- **Django Security**: `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`
+- **Branding**: `APP_TITLE_EN`, `APP_TITLE_DE`, `ORGANIZATION_NAME_EN`, `ORGANIZATION_NAME_DE`, `FOOTER_TEXT`, `LOGO_FILENAME`
+- **Corporate Identity**: `PRIMARY_COLOR`, `SECONDARY_COLOR` (hex codes without #)
 - **Translation**: `TRANSLATION_DETECTION_LEN`, `STATISTICS_DAYS`, `STATISTICS_MONTHS`, `STATISTICS_YEARS`
 - **Localization**: `TIME_ZONE`, `LANGUAGE_CODE`
+
+Note: `SECRET_KEY` is auto-generated on first run - do not configure manually.
 
 ### Database
 
@@ -236,7 +285,6 @@ The application uses SQLite (`db.sqlite3`) as its database:
 
 ### Application won't start
 - Check `DEEPL_AUTHKEY` is set correctly
-- Verify `DJANGO_SECRET_KEY` is configured
 - Check `DJANGO_ALLOWED_HOSTS` includes your domain
 - Review logs: `docker-compose logs deepl`
 
@@ -304,23 +352,21 @@ poc-deepl/
 
 ## Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-[Specify your license here]
+This project is licensed under the **GNU Affero General Public License v3.0 or later** (AGPL-3.0-or-later).
+
+See [LICENSE](LICENSE) for the full license text.
 
 ## Credits
 
-**Original Author**: David Kleinhans (Alfred Wegener Institute)
+**Author**: David Kleinhans  
+**Affiliation**: Jade University of Applied Sciences  
+**Contact**: david.kleinhans@jade-hs.de
 
-This project was originally developed at the Alfred Wegener Institute for Polar and Marine Research (AWI) to provide secure, privacy-focused translation services for research and administrative purposes.
+This project was originally developed at the Alfred Wegener Institute for Polar and Marine Research (AWI) and is now maintained at Jade University of Applied Sciences to provide secure, privacy-focused translation services for research and administrative purposes.
 
 ## Support
 
@@ -328,10 +374,17 @@ For issues and questions:
 - Check the [Troubleshooting](#troubleshooting) section
 - Review [GLOSSARY_MANAGEMENT.md](GLOSSARY_MANAGEMENT.md) for glossary issues
 - Check application logs for detailed error messages
+- See [SECURITY.md](SECURITY.md) for security-related issues
 - Consult [Django documentation](https://docs.djangoproject.com/)
 - Consult [DeepL API documentation](https://www.deepl.com/docs-api)
 
 ## Changelog
+
+### Version 2.1 (January 2026)
+- Added corporate identity customization (colors, logo via environment)
+- Added authentication documentation for Edge-Auth Stack integration
+- Added SPDX license headers
+- Improved documentation for GitHub publication
 
 ### Version 2.0 (December 2025)
 - Added glossary management system with Django commands

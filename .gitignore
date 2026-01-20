@@ -34,7 +34,11 @@ staticfiles/
 .env.local
 .env.*.local
 *.env~
+# Actual env files with secrets (keep only .sample and .example files)
+env/deepl.env
 env/itsm.env
+!env/*.sample
+!env/*.example
 
 # ========================
 # IDEs

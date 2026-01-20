@@ -2,6 +2,8 @@
 
 This document provides detailed information about the Docker deployment setup for the DeepL Translation Frontend.
 
+> ⚠️ **IMPORTANT**: This service provides access to your DeepL API key. It MUST be deployed behind an authentication proxy. See [SECURITY.md](SECURITY.md) for details.
+
 ## Architecture Overview
 
 The application uses a multi-container Docker setup:
