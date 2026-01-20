@@ -59,7 +59,7 @@ The application uses a multi-container Docker setup:
 #### Secret Key Management
 - **Automatic Generation**: Secret key auto-generated on first run
 - **File-Based Storage**: Stored in `/app/secrets/django_secret_key`
-- **Docker Volume**: Persisted in `deepl_secrets` volume
+- **Docker Volume**: Persisted in `translation_secrets` volume
 - **Restricted Permissions**: File has `600` permissions (owner read/write only)
 - **No Environment Exposure**: Not stored in environment variables or logs
 
@@ -106,10 +106,10 @@ The application uses a multi-container Docker setup:
 
 #### Volume Management
 - Separate volumes for different data types:
-  - `deepl_secrets`: Secret keys
-  - `deepl_database`: SQLite database
-  - `deepl_logs`: Application logs
-  - `deepl_staticfiles`: Collected static files
+  - `translation_secrets`: Secret keys
+  - `translation_database`: SQLite database
+  - `translation_logs`: Application logs
+  - `translation_staticfiles`: Collected static files
 
 #### Environment Configuration
 - All settings via environment variables
@@ -162,7 +162,7 @@ The application uses a multi-container Docker setup:
 
 ## Volume Details
 
-### deepl_secrets
+### translation_secrets
 **Purpose**: Store Django secret key  
 **Path in Container**: `/app/secrets`  
 **Contents**: `django_secret_key` file  
@@ -170,14 +170,14 @@ The application uses a multi-container Docker setup:
 
 **Backup**: Should be backed up for disaster recovery
 
-### deepl_database
+### translation_database
 **Purpose**: SQLite database file  
 **Path in Container**: `/app/data`  
 **Contents**: `db.sqlite3`, `db.sqlite3-wal`, `db.sqlite3-shm`
 
 **Backup**: Critical - regular backups recommended
 
-### deepl_logs
+### translation_logs
 **Purpose**: Application and server logs  
 **Path in Container**: `/app/logs`  
 **Contents**:
@@ -187,7 +187,7 @@ The application uses a multi-container Docker setup:
 
 **Maintenance**: Consider log rotation
 
-### deepl_staticfiles
+### translation_staticfiles
 **Purpose**: Collected static assets  
 **Path in Container**: `/app/staticfiles`  
 **Contents**: CSS, JavaScript, images, etc.
@@ -210,7 +210,7 @@ The application uses a multi-container Docker setup:
    - Django reads from environment
 
 3. **Persistence**:
-   - File stored in Docker volume `deepl_secrets`
+   - File stored in Docker volume `translation_secrets`
    - Survives container restarts and updates
    - Shared across container instances (if scaling)
 
@@ -218,18 +218,18 @@ The application uses a multi-container Docker setup:
 
 #### View Current Secret Key
 ```bash
-docker exec deepl-app cat /app/secrets/django_secret_key
+docker exec translation-app cat /app/secrets/django_secret_key
 ```
 
 #### Backup Secret Key
 ```bash
-docker cp deepl-app:/app/secrets/django_secret_key ./backup/
+docker cp translation-app:/app/secrets/django_secret_key ./backup/
 ```
 
 #### Restore Secret Key
 ```bash
-docker cp ./backup/django_secret_key deepl-app:/app/secrets/
-docker restart deepl-app
+docker cp ./backup/django_secret_key translation-app:/app/secrets/
+docker restart translation-app
 ```
 
 #### Regenerate Secret Key
@@ -238,7 +238,7 @@ docker restart deepl-app
 docker-compose down
 
 # Remove secret volume
-docker volume rm deepl_secrets
+docker volume rm translation_secrets
 
 # Start container (will generate new key)
 docker-compose up -d
@@ -290,7 +290,7 @@ docker-compose logs -f deepl
 docker-compose logs -f nginx
 
 # Application logs from volume
-docker exec deepl-app tail -f /app/logs/django.log
+docker exec translation-app tail -f /app/logs/django.log
 ```
 
 #### Database Operations
@@ -302,10 +302,10 @@ docker-compose exec deepl python manage.py makemigrations
 docker-compose exec deepl python manage.py migrate
 
 # Backup database
-docker cp deepl-app:/app/data/db.sqlite3 ./backup/db.sqlite3
+docker cp translation-app:/app/data/db.sqlite3 ./backup/db.sqlite3
 
 # Restore database
-docker cp ./backup/db.sqlite3 deepl-app:/app/data/
+docker cp ./backup/db.sqlite3 translation-app:/app/data/
 docker-compose restart deepl
 ```
 
@@ -330,10 +330,10 @@ BACKUP_DIR="./backups/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 
 # Backup database
-docker cp deepl-app:/app/data/db.sqlite3 "$BACKUP_DIR/"
+docker cp translation-app:/app/data/db.sqlite3 "$BACKUP_DIR/"
 
 # Backup secret key
-docker cp deepl-app:/app/secrets/django_secret_key "$BACKUP_DIR/"
+docker cp translation-app:/app/secrets/django_secret_key "$BACKUP_DIR/"
 
 # Backup environment
 cp env/deepl.env "$BACKUP_DIR/"
@@ -355,12 +355,12 @@ fi
 docker-compose down
 
 # Restore database
-docker volume create deepl_database
-docker run --rm -v deepl_database:/data -v "$BACKUP_DIR":/backup alpine cp /backup/db.sqlite3 /data/
+docker volume create translation_database
+docker run --rm -v translation_database:/data -v "$BACKUP_DIR":/backup alpine cp /backup/db.sqlite3 /data/
 
 # Restore secret key
-docker volume create deepl_secrets
-docker run --rm -v deepl_secrets:/secrets -v "$BACKUP_DIR":/backup alpine sh -c "cp /backup/django_secret_key /secrets/ && chmod 600 /secrets/django_secret_key"
+docker volume create translation_secrets
+docker run --rm -v translation_secrets:/secrets -v "$BACKUP_DIR":/backup alpine sh -c "cp /backup/django_secret_key /secrets/ && chmod 600 /secrets/django_secret_key"
 
 # Restore environment
 cp "$BACKUP_DIR/deepl.env" env/
@@ -387,35 +387,35 @@ docker-compose logs deepl
 ### Secret Key Issues
 ```bash
 # Verify secret key file exists
-docker exec deepl-app ls -la /app/secrets/
+docker exec translation-app ls -la /app/secrets/
 
 # Check file contents
-docker exec deepl-app cat /app/secrets/django_secret_key
+docker exec translation-app cat /app/secrets/django_secret_key
 
 # Verify environment variable
-docker exec deepl-app env | grep DJANGO_SECRET_KEY
+docker exec translation-app env | grep DJANGO_SECRET_KEY
 ```
 
 ### Database Issues
 ```bash
 # Check database file
-docker exec deepl-app ls -la /app/data/
+docker exec translation-app ls -la /app/data/
 
 # Run migrations
 docker-compose exec deepl python manage.py migrate
 
 # Check database integrity
-docker exec deepl-app python manage.py check --database default
+docker exec translation-app python manage.py check --database default
 ```
 
 ### Permission Issues
 ```bash
 # Check file ownership
-docker exec deepl-app ls -la /app/
+docker exec translation-app ls -la /app/
 
 # If needed, fix permissions
-docker exec -u root deepl-app chown -R appuser:appuser /app/data
-docker exec -u root deepl-app chown -R appuser:appuser /app/secrets
+docker exec -u root translation-app chown -R appuser:appuser /app/data
+docker exec -u root translation-app chown -R appuser:appuser /app/secrets
 ```
 
 ## Production Recommendations
