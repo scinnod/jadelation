@@ -53,6 +53,25 @@ For local development without the auth stack:
 1. Set `DJANGO_DEBUG=True` in your env file
 2. Access the service directly at `http://localhost:8000`
 
+### SSO Logout
+
+When deployed behind an SSO proxy (OAuth2-proxy, Keycloak, etc.), users may want to log out of the SSO session. Since this application has no built-in authentication (it relies on the upstream proxy), it provides an optional logout button that redirects to the proxy's logout endpoint.
+
+To enable the logout button:
+1. Set `SSO_LOGOUT_URL` in your environment file to your proxy's logout URL
+2. The logout link will appear in the footer of all pages
+
+Example configurations:
+```bash
+# OAuth2-proxy
+SSO_LOGOUT_URL=https://auth.example.com/oauth2/sign_out
+
+# Keycloak
+SSO_LOGOUT_URL=https://auth.example.com/realms/myrealm/protocol/openid-connect/logout
+```
+
+**Note**: The logout is anonymous - no username is displayed since the application doesn't have access to user identity information. Users simply click "logout" to end their SSO session.
+
 ## Features
 
 ### Translation Interface
@@ -125,6 +144,9 @@ Optional branding:
 - `LOGO_FILENAME`: Logo file in user_files/logo/ directory
 - `PRIMARY_COLOR`: Primary brand color (hex without #, e.g., `0d6efd`)
 - `SECONDARY_COLOR`: Secondary brand color (hex without #, e.g., `6610f2`)
+
+Optional SSO integration:
+- `SSO_LOGOUT_URL`: Logout URL for upstream SSO proxy (see [SSO Logout](#sso-logout))
 
 ### 3. Add Logo (Optional)
 

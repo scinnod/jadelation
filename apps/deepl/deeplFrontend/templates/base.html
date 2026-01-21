@@ -125,44 +125,60 @@
 
       {# Footer with copyright, navigation links, and language switcher #}
       <div class="pt-4 text-secondary">
-        <small>
-          {# Footer text with dynamic year and optional organization name #}
-          {% if ORGANIZATION_NAME %}
-            {{ FOOTER_TEXT|safe }} by {{ ORGANIZATION_NAME }}
-          {% else %}
-            {{ FOOTER_TEXT|safe }}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <small class="flex-grow-1">
+            {# Footer text with dynamic year and optional organization name #}
+            {% if ORGANIZATION_NAME %}
+              {{ FOOTER_TEXT|safe }} by {{ ORGANIZATION_NAME }}
+            {% else %}
+              {{ FOOTER_TEXT|safe }}
+            {% endif %}
+            
+            <span class="px-1">|</span>
+            
+            {# Usage statistics links with different granularities #}
+            {% translate "usage statistics" %}:
+            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='d' %}">
+              {% translate "daily" %}
+            </a>-
+            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='m' %}">
+              {% translate "monthly" %}
+            </a>-
+            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='y' %}">
+              {% translate "annually" %}
+            </a>
+            
+            <span class="px-1">|</span>
+            
+            {# Language switcher - only shown if multiple languages available #}
+            {% get_available_languages as LANGUAGES %}
+            {% if LANGUAGES|length > 1 %}
+              {% get_current_language as CURRENT_LANGUAGE %}
+              {% for lang_code, lang_name in LANGUAGES %}
+                {% if lang_code != CURRENT_LANGUAGE %}
+                  <a class="link-secondary" href="{% change_lang lang_code %}">{{ lang_code }}</a>
+                {% else %}
+                  <a class="link-secondary text-decoration-none fw-bold" href="{% change_lang lang_code %}">{{ lang_code }}</a>
+                {% endif %}
+                {% if not forloop.last %}/{% endif %}
+              {% endfor %}
+            {% endif %}
+          </small>
+          
+          {# SSO Logout button - only shown if SSO_LOGOUT_URL is configured #}
+          {# Positioned on the far right with icon for better UX #}
+          {% if SSO_LOGOUT_URL %}
+            <small class="ms-auto">
+              <a class="link-secondary text-decoration-none" href="{{ SSO_LOGOUT_URL }}" title="{% translate 'logout' %}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-right" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                  <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0z"/>
+                  <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z"/>
+                </svg>
+                {% translate "logout" %}
+              </a>
+            </small>
           {% endif %}
-          
-          <span class="px-1">|</span>
-          
-          {# Usage statistics links with different granularities #}
-          {% translate "usage statistics" %}:
-          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='d' %}">
-            {% translate "daily" %}
-          </a>-
-          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='m' %}">
-            {% translate "monthly" %}
-          </a>-
-          <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='y' %}">
-            {% translate "annually" %}
-          </a>
-          
-          <span class="px-1">|</span>
-          
-          {# Language switcher - only shown if multiple languages available #}
-          {% get_available_languages as LANGUAGES %}
-          {% if LANGUAGES|length > 1 %}
-            {% get_current_language as CURRENT_LANGUAGE %}
-            {% for lang_code, lang_name in LANGUAGES %}
-              {% if lang_code != CURRENT_LANGUAGE %}
-                <a class="link-secondary" href="{% change_lang lang_code %}">{{ lang_code }}</a>
-              {% else %}
-                <a class="link-secondary text-decoration-none fw-bold" href="{% change_lang lang_code %}">{{ lang_code }}</a>
-              {% endif %}
-              {% if not forloop.last %}/{% endif %}
-            {% endfor %}
-          {% endif %}
-        </small>
+        </div>
       </div>
     </div>
 

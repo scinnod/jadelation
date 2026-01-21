@@ -71,6 +71,13 @@ FOOTER_TEXT = os.getenv("FOOTER_TEXT", "{year}+ Translation Service")
 LOGO_FILENAME = os.getenv("LOGO_FILENAME", "")  # Filename in static/logo/
 LOGO_MAX_WIDTH = int(os.getenv("LOGO_MAX_WIDTH", "250"))  # Maximum width in pixels
 
+# SSO Logout URL (optional)
+# When this app is deployed behind an SSO proxy (e.g., OAuth2-proxy, Keycloak),
+# set this to the logout URL of the downstream proxy to enable a logout button.
+# The app itself has no authentication, but users may want to log out of the SSO.
+# Example: SSO_LOGOUT_URL=https://auth.example.com/oauth2/sign_out
+SSO_LOGOUT_URL = os.getenv("SSO_LOGOUT_URL") or None  # Default: None (logout button hidden)
+
 # Corporate Identity - Colors (hex codes without #)
 # These colors are used throughout the UI for consistent branding
 PRIMARY_COLOR = os.getenv("PRIMARY_COLOR", "0d6efd")  # Default Bootstrap primary blue

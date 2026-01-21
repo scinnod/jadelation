@@ -29,6 +29,7 @@ def app_settings(request):
         - LOGO_MAX_WIDTH: Maximum logo width in pixels
         - PRIMARY_COLOR: Primary brand color (hex code without #)
         - SECONDARY_COLOR: Secondary brand color (hex code without #)
+        - SSO_LOGOUT_URL: URL for SSO logout (if configured, enables logout button)
     """
     # Get current language
     lang = get_language()
@@ -60,4 +61,5 @@ def app_settings(request):
         'LOGO_MAX_WIDTH': settings.LOGO_MAX_WIDTH,
         'PRIMARY_COLOR': settings.PRIMARY_COLOR,
         'SECONDARY_COLOR': settings.SECONDARY_COLOR,
+        'SSO_LOGOUT_URL': settings.SSO_LOGOUT_URL,
     }

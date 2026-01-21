@@ -158,6 +158,10 @@ msgstr "monatlich"
 msgid "annually"
 msgstr "jährlich"
 
+#: templates/base.html:76
+msgid "logout"
+msgstr "Abmelden"
+
 #: templates/statistics_frontend.html:12
 msgid "Statistics"
 msgstr "Statistiken"
