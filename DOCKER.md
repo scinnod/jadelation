@@ -125,7 +125,7 @@ The application uses a multi-container Docker setup:
 
 ### Nginx Container
 
-**Image**: `nginx:1.25-alpine`  
+**Image**: `nginx:1.27-alpine`  
 **Purpose**: Reverse proxy and static file server
 
 **Volumes**:
@@ -142,7 +142,7 @@ The application uses a multi-container Docker setup:
 
 ### DeepL Application Container
 
-**Base Image**: `python:3.11-slim`  
+**Base Image**: `python:3.12-slim`  
 **User**: Non-root (`appuser`)
 
 **Volumes**:

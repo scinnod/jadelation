@@ -1,14 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
 # Python dependencies for DeepL Translation Frontend
-# TODO: Review and document licenses for all dependencies in NOTICE file
+# All dependencies listed below are compatible with Apache-2.0 license.
+# See NOTICE file for bundled components (Bootstrap, jQuery).
+#
+# Version pinning strategy:
+# - Using ~= (compatible release) to allow patch updates but prevent breaking changes
+# - Example: Django~=5.2.0 allows 5.2.x but not 5.3.0
+# - This ensures security patches while maintaining stability
 
-Django==4.2
-gunicorn
-django-crispy-forms==2.0
-crispy-bootstrap5==0.7
-pytz
-python-dateutil
-requests
-deepl
-markdown
+Django~=5.2.0
+gunicorn~=23.0.0
+django-crispy-forms~=2.3
+crispy-bootstrap5~=2024.10
+python-dateutil~=2.9.0
+requests~=2.32.3
+deepl~=1.18.0
+markdown~=3.7

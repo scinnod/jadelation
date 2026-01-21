@@ -107,8 +107,8 @@ See [GLOSSARY_MANAGEMENT.md](GLOSSARY_MANAGEMENT.md) for detailed glossary docum
 
 ## Requirements
 
-- Python 3.8+
-- Django 4.2+
+- Python 3.12+
+- Django 5.2+ (LTS)
 - DeepL API Pro account (API key required)
 - SQLite (default) or PostgreSQL
 - Docker and Docker Compose (for containerized deployment)

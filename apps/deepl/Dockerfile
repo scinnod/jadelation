@@ -6,7 +6,7 @@
 # Multi-stage build for optimized production image
 # ==============================================================================
 
-FROM python:3.11-slim AS base
+FROM python:3.12-slim AS base
 
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
