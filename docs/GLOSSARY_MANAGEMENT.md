@@ -167,14 +167,32 @@ Removing glossary from database...
 
 ## How Glossaries Are Used
 
-Once uploaded, glossaries are automatically loaded when the Django application starts. The `load_glossaries()` function in `views.py` reads all glossaries from the database and fetches their details from the DeepL API.
+Glossaries are loaded **lazily** on the first translation request, not at
+application startup.  The `_GlossaryCache` singleton in `views.py` reads all
+`Glossary` records from the database (ordered by upload date, newest first),
+fetches each `GlossaryInfo` from the DeepL API, and stores them in an
+in-memory dict keyed by normalised 2-letter language codes (e.g. `DE->EN`).
 
-Glossaries are applied during translation based on the language pair:
-- A translation from DE to EN-GB will use the glossary with key "DE->EN-GB" if available
-- A translation from EN to DE will use the glossary with key "EN->DE" if available
+The cache **auto-refreshes** after a configurable TTL (default: 10 minutes,
+configurable via `GLOSSARY_CACHE_TTL` in seconds in `settings.py`).
 
-**To reload glossaries without restarting the server:**
-You need to restart the Django application (e.g., restart the Docker container or reload the WSGI/ASGI application).
+### Language-code normalisation
+
+Both the cache keys and the translation-view lookup normalise language codes
+to their 2-letter base form.  This means a glossary uploaded with
+`target_lang="EN-GB"` is stored under the key `DE->EN` and will match any
+translation direction whose base codes are DE and EN.
+
+### Duplicate language pairs
+
+If **multiple glossaries** for the same language pair exist in the database,
+only the **most recently uploaded** one is used — older duplicates for that
+pair are skipped.  A log message is emitted for every skipped duplicate.
+
+This means you can safely upload a new version of a glossary without first
+removing the old one.  The new glossary will take effect automatically after
+the cache refreshes (within `GLOSSARY_CACHE_TTL` seconds) or after a
+container restart.
 
 ## Database Schema
 
@@ -192,8 +210,10 @@ The `Glossary` model stores:
 
 ### Glossary not being used in translations
 1. Check that the glossary exists: `python manage.py glossary_list`
-2. Verify the language pair matches exactly (DE->EN-GB vs DE->EN)
-3. Restart the Django application to reload glossaries
+2. Language codes are normalised to 2-letter base codes automatically;
+   you do **not** need exact regional-variant matches
+3. The cache refreshes automatically after the TTL expires (default
+   10 min); you can also restart the container to force a reload
 4. Check application logs for errors during glossary loading
 
 ### Upload fails with DeepL API error

@@ -56,13 +56,46 @@ if not DEEPL_AUTHKEY:
 # Application Branding Configuration
 # ===================================
 
-# Application title (displayed in browser tab) - supports multiple languages
-APP_TITLE_EN = os.getenv("APP_TITLE_EN", "DeepL Translation Frontend")
-APP_TITLE_DE = os.getenv("APP_TITLE_DE", "DeepL Übersetzungs-Frontend")
+# Helper: collect language-specific variants of a setting from environment.
+# Reads APP_TITLE_EN, APP_TITLE_DE, APP_TITLE_FR, … (any _XX suffix)
+# and returns a dict  {"en": "…", "de": "…", …}.
+def _collect_i18n_env(prefix, defaults=None):
+    """Build a dict of language-keyed values from environment variables.
 
-# Organization name (displayed in footer, empty to hide) - supports multiple languages
-ORGANIZATION_NAME_EN = os.getenv("ORGANIZATION_NAME_EN", "")
-ORGANIZATION_NAME_DE = os.getenv("ORGANIZATION_NAME_DE", "")
+    Scans for ``<PREFIX>_<LANG>`` env vars (e.g. ``APP_TITLE_EN``,
+    ``APP_TITLE_DE``).  *defaults* is an optional dict of fallback values
+    that is used when the corresponding env var is not set.
+    """
+    result = {}
+    if defaults is None:
+        defaults = {}
+    # 1. Seed with defaults
+    for lang, value in defaults.items():
+        result[lang.lower()] = value
+    # 2. Override / extend from environment
+    for key, value in os.environ.items():
+        if key.startswith(prefix + "_") and value:
+            lang_code = key[len(prefix) + 1:].lower()  # APP_TITLE_EN -> "en"
+            if lang_code:  # ignore bare APP_TITLE_ without language
+                result[lang_code] = value
+    return result
+
+
+# Application title (displayed in browser tab) — language-specific via env vars.
+# Set  APP_TITLE_EN, APP_TITLE_DE, APP_TITLE_FR …  in the env file.
+# The context processor picks the right value for the current language
+# and falls back through LANGUAGE_CODE → "en" → first available.
+APP_TITLE = _collect_i18n_env("APP_TITLE", {
+    "en": "DeepL Translation Frontend",
+    "de": "DeepL Übersetzungs-Frontend",
+})
+
+# Organisation name (displayed in footer, empty string hides it)
+# Set  ORGANIZATION_NAME_EN, ORGANIZATION_NAME_DE, …  in the env file.
+ORGANIZATION_NAME = _collect_i18n_env("ORGANIZATION_NAME", {
+    "en": "",
+    "de": "",
+})
 
 # Footer text (use {year} for current year placeholder)
 FOOTER_TEXT = os.getenv("FOOTER_TEXT", "{year}+ Translation Service")

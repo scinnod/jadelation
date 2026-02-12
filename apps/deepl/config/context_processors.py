@@ -12,15 +12,55 @@ from django.conf import settings
 from django.utils.translation import get_language
 
 
+def _get_localised(mapping, fallback=""):
+    """Pick the value for the current language from *mapping*.
+
+    Fallback chain:
+      1. Exact 2-letter language code (e.g. ``de``)
+      2. Django's ``LANGUAGE_CODE`` setting (normalised, e.g. ``en``)
+      3. ``"en"`` as ultimate default
+      4. First available value in the dict
+      5. *fallback* string
+    """
+    if not mapping:
+        return fallback
+
+    lang = get_language()
+    if lang:
+        lang = lang.split("-")[0].lower()
+    else:
+        lang = None
+
+    # Try current language
+    if lang and lang in mapping:
+        return mapping[lang]
+
+    # Try configured default language
+    default_lang = getattr(settings, "LANGUAGE_CODE", "en-us").split("-")[0].lower()
+    if default_lang in mapping:
+        return mapping[default_lang]
+
+    # Try English
+    if "en" in mapping:
+        return mapping["en"]
+
+    # Return any value that exists
+    for value in mapping.values():
+        if value:
+            return value
+
+    return fallback
+
+
 def app_settings(request):
     """
     Add application settings to template context.
-    
+
     Makes branding and configuration settings available in all templates
     without needing to pass them explicitly in every view.
-    
+
     Automatically selects language-specific versions based on current language.
-    
+
     Available template variables:
         - APP_TITLE: Application title for browser tab (language-specific)
         - ORGANIZATION_NAME: Organization name for footer (language-specific)
@@ -31,28 +71,13 @@ def app_settings(request):
         - SECONDARY_COLOR: Secondary brand color (hex code without #)
         - SSO_LOGOUT_URL: URL for SSO logout (if configured, enables logout button)
     """
-    # Get current language
-    lang = get_language()
-    if lang:
-        lang = lang.split('-')[0]  # Convert 'en-us' to 'en'
-    else:
-        lang = 'en'
-    
-    # Select language-specific APP_TITLE
-    if lang == 'de':
-        app_title = settings.APP_TITLE_DE
-    else:
-        app_title = settings.APP_TITLE_EN
-    
-    # Select language-specific ORGANIZATION_NAME
-    if lang == 'de':
-        organization_name = settings.ORGANIZATION_NAME_DE
-    else:
-        organization_name = settings.ORGANIZATION_NAME_EN
-    
+    # Select language-specific values via fallback chain
+    app_title = _get_localised(settings.APP_TITLE)
+    organization_name = _get_localised(settings.ORGANIZATION_NAME)
+
     # Replace {year} placeholder with current year
     footer_text = settings.FOOTER_TEXT.replace('{year}', str(datetime.now().year))
-    
+
     return {
         'APP_TITLE': app_title,
         'ORGANIZATION_NAME': organization_name,

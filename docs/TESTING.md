@@ -70,7 +70,8 @@ No external database or services needed — tests use in-memory SQLite and mock 
 
 ## Running Tests on GitHub Actions
 
-Tests run automatically on every push and pull request via GitHub Actions (`.github/workflows/django-tests.yml`).
+Tests run automatically on every push and pull request to `main` or `develop`
+via GitHub Actions (`.github/workflows/django-tests.yml`).
 
 The CI workflow:
 1. Tests against Python 3.11 and 3.12 in parallel
@@ -82,7 +83,7 @@ The CI workflow:
 **Status Badge:** Add this to your README to show test status:
 
 ```markdown
-[![Django Tests](https://github.com/YOUR_ORG/YOUR_REPO/actions/workflows/django-tests.yml/badge.svg)](https://github.com/YOUR_ORG/YOUR_REPO/actions/workflows/django-tests.yml)
+[![Django Tests](https://github.com/javidkl/jade-django-1-deepl/actions/workflows/django-tests.yml/badge.svg)](https://github.com/javidkl/jade-django-1-deepl/actions/workflows/django-tests.yml)
 ```
 
 ## Test Configuration

@@ -8,6 +8,7 @@ Tests cover:
 - Form validation and choices
 - View functionality (GET requests, POST translations with mocked API)
 - URL routing
+- Context processor language selection and fallback chain
 - Template tag functionality
 - Settings configuration
 """
@@ -299,9 +300,18 @@ class TranslationViewPostTest(TestCase):
 
     def setUp(self):
         self.client = Client()
+        # Create a no-op glossary cache for tests that don't need glossaries
+        from .views import _GlossaryCache
+
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")  # never expire
+
+    def _patch_empty_glossary(self):
+        """Return a context-manager that patches glossary_cache with an empty cache."""
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_de_en_translation(self, mock_translator_cls):
         """Test DE->EN translation request."""
         mock_translator = MagicMock()
@@ -316,15 +326,15 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Hallo Welt",
-            "directionChoice": "DE->EN-GB|",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Hallo Welt",
+                "directionChoice": "DE->EN-GB|",
+            })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hello World")
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_en_de_formal_translation(self, mock_translator_cls):
         """Test EN->DE formal translation request."""
         mock_translator = MagicMock()
@@ -339,15 +349,15 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Hello World",
-            "directionChoice": "EN-GB->DE|more",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Hello World",
+                "directionChoice": "EN-GB->DE|more",
+            })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hallo Welt")
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_auto_detection_german(self, mock_translator_cls):
         """Test auto-detection when input is German."""
         mock_translator = MagicMock()
@@ -369,15 +379,15 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Guten Morgen",
-            "directionChoice": "auto",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Guten Morgen",
+                "directionChoice": "auto",
+            })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Good morning")
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_auto_detection_english(self, mock_translator_cls):
         """Test auto-detection when input is English."""
         mock_translator = MagicMock()
@@ -397,15 +407,15 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Good morning",
-            "directionChoice": "auto",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Good morning",
+                "directionChoice": "auto",
+            })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Guten Morgen")
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_creates_translation_record(self, mock_translator_cls):
         """Test that a successful translation creates a database record."""
         mock_translator = MagicMock()
@@ -421,10 +431,11 @@ class TranslationViewPostTest(TestCase):
         mock_translator.get_usage.return_value = mock_usage
 
         self.assertEqual(Translation.objects.count(), 0)
-        self.client.post(reverse("translation-form"), {
-            "sourceText": "Test text",
-            "directionChoice": "DE->EN-GB|",
-        })
+        with self._patch_empty_glossary():
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Test text",
+                "directionChoice": "DE->EN-GB|",
+            })
         self.assertEqual(Translation.objects.count(), 1)
 
         record = Translation.objects.first()
@@ -433,7 +444,6 @@ class TranslationViewPostTest(TestCase):
         self.assertFalse(record.auto_detection)
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_auto_detection_sets_flag(self, mock_translator_cls):
         """Test that auto-detection sets the auto_detection flag in DB."""
         mock_translator = MagicMock()
@@ -451,15 +461,15 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        self.client.post(reverse("translation-form"), {
-            "sourceText": "Hallo",
-            "directionChoice": "auto",
-        })
+        with self._patch_empty_glossary():
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Hallo",
+                "directionChoice": "auto",
+            })
         record = Translation.objects.first()
         self.assertTrue(record.auto_detection)
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_api_error_returns_error_message(self, mock_translator_cls):
         """Test that DeepL API error returns user-friendly error message."""
         import deepl
@@ -468,10 +478,11 @@ class TranslationViewPostTest(TestCase):
         mock_translator_cls.return_value = mock_translator
         mock_translator.translate_text.side_effect = deepl.DeepLException("API Error")
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Test text",
-            "directionChoice": "DE->EN-GB|",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Test text",
+                "directionChoice": "DE->EN-GB|",
+            })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "ERROR")
 
@@ -484,7 +495,6 @@ class TranslationViewPostTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_post_displays_usage_info(self, mock_translator_cls):
         """Test that successful translation displays API usage information."""
         mock_translator = MagicMock()
@@ -499,10 +509,11 @@ class TranslationViewPostTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        response = self.client.post(reverse("translation-form"), {
-            "sourceText": "Test",
-            "directionChoice": "DE->EN-GB|",
-        })
+        with self._patch_empty_glossary():
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "Test",
+                "directionChoice": "DE->EN-GB|",
+            })
         self.assertContains(response, "12345")
 
 
@@ -722,10 +733,250 @@ class SettingsTest(TestCase):
         """Test that crispy forms is configured with Bootstrap 5."""
         self.assertEqual(settings.CRISPY_TEMPLATE_PACK, "bootstrap5")
 
+    def test_app_title_is_dict(self):
+        """Test that APP_TITLE is a dict with language keys."""
+        self.assertIsInstance(settings.APP_TITLE, dict)
+        self.assertIn("en", settings.APP_TITLE)
+        self.assertIn("de", settings.APP_TITLE)
+
+    def test_organization_name_is_dict(self):
+        """Test that ORGANIZATION_NAME is a dict with language keys."""
+        self.assertIsInstance(settings.ORGANIZATION_NAME, dict)
+        self.assertIn("en", settings.ORGANIZATION_NAME)
+        self.assertIn("de", settings.ORGANIZATION_NAME)
+
+
+# ============================================================================
+# Context Processor Tests
+# ============================================================================
+
+class GetLocalisedTest(TestCase):
+    """Test the _get_localised() fallback chain."""
+
+    def test_returns_current_language(self):
+        """Test that the current language value is returned."""
+        from config.context_processors import _get_localised
+        with self.settings(LANGUAGE_CODE="en-us"):
+            with patch("config.context_processors.get_language", return_value="de"):
+                result = _get_localised({"en": "English Title", "de": "Deutscher Titel"})
+        self.assertEqual(result, "Deutscher Titel")
+
+    def test_falls_back_to_language_code(self):
+        """Test fallback to LANGUAGE_CODE when current language not in dict."""
+        from config.context_processors import _get_localised
+        with self.settings(LANGUAGE_CODE="en-us"):
+            with patch("config.context_processors.get_language", return_value="fr"):
+                result = _get_localised({"en": "English Title", "de": "Deutscher Titel"})
+        self.assertEqual(result, "English Title")
+
+    def test_falls_back_to_english(self):
+        """Test fallback to 'en' when LANGUAGE_CODE not in dict either."""
+        from config.context_processors import _get_localised
+        with self.settings(LANGUAGE_CODE="fr"):
+            with patch("config.context_processors.get_language", return_value="es"):
+                result = _get_localised({"en": "English Title", "de": "Deutscher Titel"})
+        self.assertEqual(result, "English Title")
+
+    def test_falls_back_to_first_available(self):
+        """Test fallback to first value when no standard key matches."""
+        from config.context_processors import _get_localised
+        with self.settings(LANGUAGE_CODE="fr"):
+            with patch("config.context_processors.get_language", return_value="es"):
+                result = _get_localised({"de": "Deutscher Titel"})
+        self.assertEqual(result, "Deutscher Titel")
+
+    def test_returns_fallback_string_for_empty_dict(self):
+        """Test that empty dict returns the fallback string."""
+        from config.context_processors import _get_localised
+        result = _get_localised({}, fallback="Fallback")
+        self.assertEqual(result, "Fallback")
+
+    def test_handles_regional_language_code(self):
+        """Test that regional codes like 'en-us' are normalised to 'en'."""
+        from config.context_processors import _get_localised
+        with self.settings(LANGUAGE_CODE="en-us"):
+            with patch("config.context_processors.get_language", return_value="en-us"):
+                result = _get_localised({"en": "English Title", "de": "Deutscher Titel"})
+        self.assertEqual(result, "English Title")
+
+
+class ContextProcessorTest(TestCase):
+    """Test the app_settings context processor end-to-end."""
+
+    def test_app_title_in_context(self):
+        """Test that APP_TITLE appears in rendered pages."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("APP_TITLE", response.context)
+        self.assertIsInstance(response.context["APP_TITLE"], str)
+        self.assertTrue(len(response.context["APP_TITLE"]) > 0)
+
+    def test_organization_name_in_context(self):
+        """Test that ORGANIZATION_NAME appears in rendered pages."""
+        response = self.client.get(reverse("translation-form"), follow=True)
+        self.assertIn("ORGANIZATION_NAME", response.context)
+
+    @override_settings(APP_TITLE={"en": "Test Title EN", "de": "Test Titel DE"})
+    def test_app_title_language_selection(self):
+        """Test that APP_TITLE uses the correct language."""
+        # Request with German language
+        response = self.client.get(reverse("translation-form"), HTTP_ACCEPT_LANGUAGE="de")
+        # The title should be one of the configured values
+        self.assertIn(response.context["APP_TITLE"], ["Test Title EN", "Test Titel DE"])
+
 
 # ============================================================================
 # Glossary View Integration Tests
 # ============================================================================
+
+class GlossaryCacheTest(TestCase):
+    """Test the _GlossaryCache lazy-loading and auto-refresh mechanism."""
+
+    def setUp(self):
+        self.glossary = Glossary.objects.create(
+            glossary_id="cache-test-id",
+            name="Cache Test Glossary",
+            source_lang="DE",
+            target_lang="EN-GB",
+            original_filename="cache.csv",
+            entry_count=5,
+        )
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_lazy_load_on_first_access(self, mock_translator_cls):
+        """Cache is populated lazily on the first .get() call, not at creation."""
+        from .views import _GlossaryCache
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_deepl_glossary = MagicMock()
+        mock_translator.get_glossary.return_value = mock_deepl_glossary
+
+        cache = _GlossaryCache()
+        # Cache should NOT have called the API yet
+        mock_translator_cls.assert_not_called()
+
+        # First .get() triggers loading
+        result = cache.get("DE->EN")
+        self.assertEqual(result, mock_deepl_glossary)
+        mock_translator.get_glossary.assert_called_once_with("cache-test-id")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_normalises_keys_to_two_letter_codes(self, mock_translator_cls):
+        """Cache keys are normalised to 2-letter codes (e.g. DE->EN, not DE->EN-GB)."""
+        from .views import _GlossaryCache
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_translator.get_glossary.return_value = MagicMock()
+
+        cache = _GlossaryCache()
+        self.assertIsNotNone(cache.get("DE->EN"))
+        self.assertIsNone(cache.get("DE->EN-GB"))
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_cache_ttl_refresh(self, mock_translator_cls):
+        """Cache refreshes after TTL expires."""
+        from .views import _GlossaryCache
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        first_glossary = MagicMock(name="first")
+        second_glossary = MagicMock(name="second")
+        mock_translator.get_glossary.side_effect = [first_glossary, second_glossary]
+
+        cache = _GlossaryCache()
+        self.assertEqual(cache.get("DE->EN"), first_glossary)
+
+        # Simulate TTL expiry by backdating _loaded_at
+        cache._loaded_at = 0.0
+        self.assertEqual(cache.get("DE->EN"), second_glossary)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_reload_forces_refresh(self, mock_translator_cls):
+        """Manual reload() forces an immediate refresh."""
+        from .views import _GlossaryCache
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        first_glossary = MagicMock(name="first")
+        second_glossary = MagicMock(name="second")
+        mock_translator.get_glossary.side_effect = [first_glossary, second_glossary]
+
+        cache = _GlossaryCache()
+        cache.get("DE->EN")  # initial load
+        cache.reload()       # forced refresh
+        self.assertEqual(cache.get("DE->EN"), second_glossary)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_loaded_pairs_property(self, mock_translator_cls):
+        """loaded_pairs returns the set of cached language-pair keys."""
+        from .views import _GlossaryCache
+
+        Glossary.objects.create(
+            glossary_id="en-de-id", name="EN-DE test",
+            source_lang="EN", target_lang="DE",
+            original_filename="b.csv", entry_count=3,
+        )
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_translator.get_glossary.return_value = MagicMock()
+
+        cache = _GlossaryCache()
+        self.assertEqual(cache.loaded_pairs, {"DE->EN", "EN->DE"})
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_api_failure_returns_empty_cache(self, mock_translator_cls):
+        """If the DeepL API is unreachable the cache stays empty (no crash)."""
+        from .views import _GlossaryCache
+
+        mock_translator_cls.side_effect = Exception("API unreachable")
+
+        cache = _GlossaryCache()
+        self.assertIsNone(cache.get("DE->EN"))
+        self.assertEqual(cache.loaded_pairs, set())
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_duplicate_pair_uses_newest_glossary(self, mock_translator_cls):
+        """When multiple glossaries exist for the same language pair,
+        the most recently uploaded one is used (others are skipped)."""
+        from .views import _GlossaryCache
+
+        # Create an older duplicate glossary for the same pair (DE->EN).
+        # setUp already created one with glossary_id="cache-test-id".
+        older = Glossary.objects.create(
+            glossary_id="older-duplicate-id",
+            name="Older Duplicate Glossary",
+            source_lang="DE",
+            target_lang="EN",
+            original_filename="old.csv",
+            entry_count=3,
+        )
+        # auto_now_add ignores explicit values, so backdate via update()
+        Glossary.objects.filter(pk=older.pk).update(
+            upload_date=self.glossary.upload_date - timedelta(days=1),
+        )
+
+        newest_deepl = MagicMock(name="newest")
+        older_deepl = MagicMock(name="older")
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        # Glossary.objects.all() returns newest first (-upload_date).
+        # The cache should keep only the first (newest) one it encounters.
+        mock_translator.get_glossary.side_effect = (
+            lambda gid: newest_deepl if gid == "cache-test-id" else older_deepl
+        )
+
+        cache = _GlossaryCache()
+        result = cache.get("DE->EN")
+
+        self.assertEqual(result, newest_deepl, "Should use the newest glossary")
+        self.assertEqual(cache.loaded_pairs, {"DE->EN"})
+        # Only one entry for DE->EN, not two
+        self.assertEqual(len(cache._cache), 1)
+
 
 class GlossaryIntegrationTest(TestCase):
     """Test glossary integration in the translation flow."""
@@ -741,6 +992,15 @@ class GlossaryIntegrationTest(TestCase):
             original_filename="integration.csv",
             entry_count=10,
         )
+
+    def _make_mock_glossary_cache(self, pairs):
+        """Create a mock _GlossaryCache whose .get() uses the given dict."""
+        from .views import _GlossaryCache
+
+        cache = _GlossaryCache.__new__(_GlossaryCache)
+        cache._cache = pairs
+        cache._loaded_at = float("inf")  # never expire
+        return cache
 
     @patch("deeplFrontend.views.deepl.Translator")
     def test_glossary_passed_to_translator(self, mock_translator_cls):
@@ -759,7 +1019,8 @@ class GlossaryIntegrationTest(TestCase):
 
         # Cache key uses normalised 2-letter codes (DE->EN, not DE->EN-GB)
         test_glossary_obj = MagicMock()
-        with patch("deeplFrontend.views.glossary", {"DE->EN": test_glossary_obj}):
+        mock_cache = self._make_mock_glossary_cache({"DE->EN": test_glossary_obj})
+        with patch("deeplFrontend.views.glossary_cache", mock_cache):
             self.client.post(reverse("translation-form"), {
                 "sourceText": "Testtext",
                 "directionChoice": "DE->EN-GB|",
@@ -785,7 +1046,8 @@ class GlossaryIntegrationTest(TestCase):
         mock_translator.get_usage.return_value = mock_usage
 
         test_glossary_obj = MagicMock()
-        with patch("deeplFrontend.views.glossary", {"EN->DE": test_glossary_obj}):
+        mock_cache = self._make_mock_glossary_cache({"EN->DE": test_glossary_obj})
+        with patch("deeplFrontend.views.glossary_cache", mock_cache):
             self.client.post(reverse("translation-form"), {
                 "sourceText": "Hello world",
                 "directionChoice": "EN-GB->DE|more",
@@ -795,7 +1057,6 @@ class GlossaryIntegrationTest(TestCase):
         self.assertEqual(call_kwargs.kwargs.get("glossary"), test_glossary_obj)
 
     @patch("deeplFrontend.views.deepl.Translator")
-    @patch("deeplFrontend.views.glossary", {})
     def test_no_glossary_when_not_available(self, mock_translator_cls):
         """Test that None is passed when no glossary matches."""
         mock_translator = MagicMock()
@@ -810,26 +1071,26 @@ class GlossaryIntegrationTest(TestCase):
         mock_usage.character.limit = 500000
         mock_translator.get_usage.return_value = mock_usage
 
-        self.client.post(reverse("translation-form"), {
-            "sourceText": "Hello",
-            "directionChoice": "EN-GB->DE|more",
-        })
+        mock_cache = self._make_mock_glossary_cache({})
+        with patch("deeplFrontend.views.glossary_cache", mock_cache):
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Hello",
+                "directionChoice": "EN-GB->DE|more",
+            })
 
         call_kwargs = mock_translator.translate_text.call_args
         self.assertIsNone(call_kwargs.kwargs.get("glossary"))
 
     @patch("deeplFrontend.views.deepl.Translator")
-    def test_load_glossaries_normalises_keys(self, mock_translator_cls):
-        """Test that load_glossaries() normalises cache keys to 2-letter codes.
+    def test_cache_normalises_keys(self, mock_translator_cls):
+        """Test that _GlossaryCache normalises keys to 2-letter codes.
 
         This is the root cause of the glossary-not-used bug: glossaries
-        uploaded with target_lang='EN' were stored under 'DE->EN' in the
-        cache, but the translation view looked them up as 'DE->EN-GB'
-        (the full regional code from the direction string).  After the fix,
-        load_glossaries() normalises both source and target to 2-letter
-        codes, and the view does the same for the lookup key.
+        uploaded with target_lang='EN-GB' were stored under 'DE->EN-GB' in the
+        cache, but the translation view looked them up as 'DE->EN'
+        (normalised to 2-letter codes).  After the fix both sides normalise.
         """
-        from .views import load_glossaries
+        from .views import _GlossaryCache
 
         mock_translator = MagicMock()
         mock_translator_cls.return_value = mock_translator
@@ -839,9 +1100,8 @@ class GlossaryIntegrationTest(TestCase):
         mock_translator.get_glossary.return_value = mock_deepl_glossary
 
         # DB has glossary with target_lang "EN-GB" (regional variant)
-        # load_glossaries should normalise to "DE->EN"
-        result = load_glossaries()
-
-        self.assertIn("DE->EN", result)
-        self.assertNotIn("DE->EN-GB", result)
-        self.assertEqual(result["DE->EN"], mock_deepl_glossary)
+        # _GlossaryCache should normalise to "DE->EN"
+        cache = _GlossaryCache()
+        self.assertIsNotNone(cache.get("DE->EN"))
+        self.assertIsNone(cache.get("DE->EN-GB"))
+        self.assertEqual(cache.get("DE->EN"), mock_deepl_glossary)

@@ -1,5 +1,6 @@
 # DeepL Translation Frontend
 
+[![Django Tests](https://github.com/javidkl/jade-django-1-deepl/actions/workflows/django-tests.yml/badge.svg)](https://github.com/javidkl/jade-django-1-deepl/actions/workflows/django-tests.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A privacy-focused web interface for the DeepL translation API, designed for institutional use with enhanced privacy controls and usage tracking.
@@ -138,8 +139,8 @@ Required settings:
 **Note**: `DJANGO_SECRET_KEY` is automatically generated on first run and stored securely in a Docker volume. No manual configuration needed!
 
 Optional branding:
-- `APP_TITLE_EN`, `APP_TITLE_DE`: Application title (multilingual)
-- `ORGANIZATION_NAME_EN`, `ORGANIZATION_NAME_DE`: Your organization name (footer)
+- `APP_TITLE_<LANG>`: Application title per language (`APP_TITLE_EN`, `APP_TITLE_DE`, …)
+- `ORGANIZATION_NAME_<LANG>`: Your organization name per language (footer)
 - `FOOTER_TEXT`: Custom footer text
 - `LOGO_FILENAME`: Logo file in `overrides/logo/` directory (see step 3)
 - `PRIMARY_COLOR`: Primary brand color (hex without #, e.g., `0d6efd`)
@@ -299,7 +300,7 @@ See `env/deepl.env.sample` for all available configuration options.
 Key settings:
 - **DeepL API**: `DEEPL_AUTHKEY`
 - **Django Security**: `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`
-- **Branding**: `APP_TITLE_EN`, `APP_TITLE_DE`, `ORGANIZATION_NAME_EN`, `ORGANIZATION_NAME_DE`, `FOOTER_TEXT`, `LOGO_FILENAME`
+- **Branding**: `APP_TITLE_<LANG>`, `ORGANIZATION_NAME_<LANG>`, `FOOTER_TEXT`, `LOGO_FILENAME`
 - **Corporate Identity**: `PRIMARY_COLOR`, `SECONDARY_COLOR` (hex codes without #)
 - **Translation**: `TRANSLATION_DETECTION_LEN`, `STATISTICS_DAYS`, `STATISTICS_MONTHS`, `STATISTICS_YEARS`
 - **Localization**: `TIME_ZONE`, `LANGUAGE_CODE`

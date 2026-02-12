@@ -21,6 +21,10 @@ from .settings import *  # noqa: E402, F403
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
+# Use a language code that matches LANGUAGES exactly
+# (base settings may have "en-us" which doesn't match i18n_patterns)
+LANGUAGE_CODE = "en"
+
 # Use in-memory SQLite for faster tests
 DATABASES = {
     "default": {

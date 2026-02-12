@@ -7,6 +7,7 @@ This module provides views for the translation interface and usage statistics.
 """
 
 import logging
+import time
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -32,68 +33,135 @@ STATISTICS_DAYS = getattr(settings, 'STATISTICS_DAYS', 31)
 STATISTICS_MONTHS = getattr(settings, 'STATISTICS_MONTHS', 24)
 STATISTICS_YEARS = getattr(settings, 'STATISTICS_YEARS', 5)
 
+# Time-to-live for the glossary cache in seconds (default: 10 minutes).
+# The cache is refreshed lazily on the next translation request after expiry.
+GLOSSARY_CACHE_TTL = getattr(settings, 'GLOSSARY_CACHE_TTL', 600)
 
-def load_glossaries():
+
+class _GlossaryCache:
     """
-    Load active glossaries from database into a cache for use in translations.
-    
-    Returns:
-        dict: Dictionary mapping language pairs (e.g., 'DE->EN-GB') to DeepL glossary objects
-    
-    Note:
-        This function initializes a translator and fetches glossaries from DeepL API
-        based on the glossary IDs stored in the database. Use management commands
-        to manage glossaries:
-        - python manage.py glossary_put <csv_file> <name> <source> <target>
-        - python manage.py glossary_list
-        - python manage.py glossary_remove <name_or_id>
+    Lazy, auto-refreshing glossary cache.
+
+    Instead of loading glossaries once at module-import time (which
+    silently fails when the DeepL API or the database is not yet
+    available during Docker startup), the cache is populated on the
+    first translation request and refreshed after *GLOSSARY_CACHE_TTL*
+    seconds.
+
+    The cache maps normalised 2-letter language pairs (e.g. ``"DE->EN"``)
+    to ``deepl.GlossaryInfo`` objects fetched from the DeepL API.
     """
-    glossary_cache = {}
-    
-    try:
-        translator = deepl.Translator(settings.DEEPL_AUTHKEY)
-        
-        # Get all glossaries from database
-        db_glossaries = Glossary.objects.all()
-        
-        for db_glossary in db_glossaries:
-            try:
-                # Fetch the glossary object from DeepL API
-                deepl_glossary = translator.get_glossary(db_glossary.glossary_id)
-                
-                # Store in cache using normalised language pair as key
-                # Normalise to 2-letter codes (e.g. EN-GB -> EN) so that
-                # lookups from the translation view always match,
-                # regardless of whether the glossary was uploaded with
-                # a regional variant code or a plain language code.
-                norm_source = db_glossary.source_lang[:2].upper()
-                norm_target = db_glossary.target_lang[:2].upper()
-                cache_key = f"{norm_source}->{norm_target}"
-                glossary_cache[cache_key] = deepl_glossary
-                
-                logger.info(
-                    f"Loaded glossary: {db_glossary.name} "
-                    f"({cache_key}, {db_glossary.entry_count} entries)"
-                )
-            except deepl.DeepLException as e:
-                logger.warning(
-                    f"Could not load glossary {db_glossary.name} "
-                    f"(ID: {db_glossary.glossary_id}): {e}"
-                )
-            except Exception as e:
-                logger.exception(
-                    f"Unexpected error loading glossary {db_glossary.name}: {e}"
-                )
-                
-    except Exception as e:
-        logger.error(f"Failed to initialize glossary cache: {e}")
-    
-    return glossary_cache
+
+    def __init__(self):
+        self._cache = {}
+        self._loaded_at = 0.0  # epoch – forces first load
+
+    # ------------------------------------------------------------------
+    # public helpers
+    # ------------------------------------------------------------------
+
+    def get(self, key, default=None):
+        """Look up a glossary by normalised language-pair key."""
+        self._ensure_loaded()
+        return self._cache.get(key, default)
+
+    def reload(self):
+        """Force an immediate reload of the cache."""
+        self._load()
+
+    @property
+    def loaded_pairs(self):
+        """Return the set of cached language-pair keys (for diagnostics)."""
+        self._ensure_loaded()
+        return set(self._cache.keys())
+
+    # ------------------------------------------------------------------
+    # internals
+    # ------------------------------------------------------------------
+
+    def _ensure_loaded(self):
+        """Load (or refresh) the cache when stale or empty."""
+        if time.monotonic() - self._loaded_at > GLOSSARY_CACHE_TTL:
+            self._load()
+
+    def _load(self):
+        """
+        Fetch GlossaryInfo objects from the DeepL API for every glossary
+        stored in the local database.
+
+        Use management commands to manage glossaries:
+         - ``python manage.py glossary_put <csv> <name> <source> <target>``
+         - ``python manage.py glossary_list``
+         - ``python manage.py glossary_remove <name_or_id>``
+        """
+        new_cache = {}
+
+        try:
+            translator = deepl.Translator(settings.DEEPL_AUTHKEY)
+            db_glossaries = Glossary.objects.all()
+
+            for db_glossary in db_glossaries:
+                try:
+                    deepl_glossary = translator.get_glossary(
+                        db_glossary.glossary_id
+                    )
+
+                    # Normalise to 2-letter base codes so that lookups
+                    # from the translation view always match, regardless
+                    # of whether the glossary was uploaded with a regional
+                    # variant code (e.g. EN-GB) or a plain code (EN).
+                    norm_source = db_glossary.source_lang[:2].upper()
+                    norm_target = db_glossary.target_lang[:2].upper()
+                    cache_key = f"{norm_source}->{norm_target}"
+
+                    # The queryset is ordered by -upload_date (newest
+                    # first).  Keep only the most recent glossary per
+                    # language pair and skip older duplicates.
+                    if cache_key in new_cache:
+                        logger.info(
+                            "Skipping older duplicate glossary: %s (%s)",
+                            db_glossary.name,
+                            cache_key,
+                        )
+                        continue
+
+                    new_cache[cache_key] = deepl_glossary
+
+                    logger.info(
+                        "Loaded glossary: %s (%s, %d entries, ready=%s)",
+                        db_glossary.name,
+                        cache_key,
+                        db_glossary.entry_count,
+                        deepl_glossary.ready,
+                    )
+                except deepl.DeepLException as e:
+                    logger.warning(
+                        "Could not load glossary %s (ID: %s): %s",
+                        db_glossary.name,
+                        db_glossary.glossary_id,
+                        e,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        "Unexpected error loading glossary %s: %s",
+                        db_glossary.name,
+                        e,
+                    )
+
+        except Exception as e:
+            logger.error("Failed to initialise glossary cache: %s", e)
+
+        self._cache = new_cache
+        self._loaded_at = time.monotonic()
+        logger.info(
+            "Glossary cache refreshed: %d pair(s) loaded – %s",
+            len(new_cache),
+            list(new_cache.keys()) or "(none)",
+        )
 
 
-# Initialize glossaries cache (loaded on server start)
-# To reload glossaries without restarting, restart the Django application
-glossary = load_glossaries()
+# Singleton instance – populated lazily on first translation request
+glossary_cache = _GlossaryCache()
 
 
 def deepl_translation(request):
@@ -165,16 +233,32 @@ def deepl_translation(request):
                 formality = direction_parts[1] if len(direction_parts[1]) > 0 else None
                 
                 # Look up glossary using normalised 2-letter codes
-                # (e.g. "DE->EN" not "DE->EN-GB") to match the cache keys
-                glossary_key = f"{source_lang[:2]}->{target_lang[:2]}"
-                
+                # (e.g. "DE->EN" not "DE->EN-GB") to match the cache keys.
+                # The DeepL API requires source_lang when a glossary is used.
+                glossary_key = f"{source_lang}->{target_lang[:2]}"
+                active_glossary = glossary_cache.get(glossary_key)
+
+                if active_glossary is not None:
+                    logger.info(
+                        "Using glossary '%s' (id=%s) for %s",
+                        active_glossary.name,
+                        active_glossary.glossary_id,
+                        glossary_key,
+                    )
+                else:
+                    logger.debug(
+                        "No glossary found for %s (available: %s)",
+                        glossary_key,
+                        glossary_cache.loaded_pairs,
+                    )
+
                 try:
                     result = translator.translate_text(
                         form.cleaned_data["sourceText"],
                         source_lang=source_lang,
                         target_lang=target_lang,
                         formality=formality,
-                        glossary=glossary.get(glossary_key, None),
+                        glossary=active_glossary,
                     )
                     translation = result.text
                     
@@ -217,7 +301,10 @@ def deepl_translation(request):
                 logger.exception(f"Failed to log translation to database: {e}")
                 # Continue - don't fail the request if logging fails
 
-            # Request current API usage and limit
+            # Request current API usage and limit.
+            # Note: get_usage() calls /v2/usage which returns the
+            # **account-level** character usage and subscription limit,
+            # not a per-API-key limit.
             try:
                 usage = translator.get_usage()
                 usage_str = _(
@@ -349,7 +436,9 @@ def deepl_daily_statistics(request, granularity):
         granularity_title = _("Requested report not available.")
         dformat = "Y-m-d"
 
-    # Retrieve usage statistics from DeepL API
+    # Retrieve usage statistics from DeepL API.
+    # Note: get_usage() returns the account-level character usage and
+    # subscription limit, not a per-API-key limit.
     try:
         translator = deepl.Translator(settings.DEEPL_AUTHKEY)
         usage = translator.get_usage()
