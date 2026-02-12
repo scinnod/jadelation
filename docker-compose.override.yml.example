@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
+# ==============================================================================
+# Docker Compose Override - Organization-Specific Customizations
+# ==============================================================================
+#
+# This file mounts organization-specific files from the overrides/ directory
+# into the container, replacing the built-in defaults.
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # Then place your files in overrides/ (see overrides/README.md)
+#   docker-compose up -d
+#
+# Docker Compose automatically merges docker-compose.override.yml with
+# docker-compose.yml - no additional flags needed.
+#
+# See overrides/README.md for details on what can be customized.
+# ==============================================================================
+
+services:
+  deepl:
+    volumes:
+      # Organization-specific about page content (Markdown)
+      # Replace the generic about texts with your organization's version
+      - ./overrides/about:/app/data/about:ro
+
+      # Organization logo
+      # Set LOGO_FILENAME in env/deepl.env to match your logo file
+      - ./overrides/logo:/app/static/logo:ro

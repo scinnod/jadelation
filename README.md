@@ -94,7 +94,7 @@ SSO_LOGOUT_URL=https://auth.example.com/realms/myrealm/protocol/openid-connect/l
 - Remove outdated glossaries
 - Automatic glossary application based on language pair
 
-See [GLOSSARY_MANAGEMENT.md](GLOSSARY_MANAGEMENT.md) for detailed glossary documentation.
+See [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) for detailed glossary documentation.
 
 ### Security Features
 - CSRF protection enabled
@@ -141,19 +141,30 @@ Optional branding:
 - `APP_TITLE_EN`, `APP_TITLE_DE`: Application title (multilingual)
 - `ORGANIZATION_NAME_EN`, `ORGANIZATION_NAME_DE`: Your organization name (footer)
 - `FOOTER_TEXT`: Custom footer text
-- `LOGO_FILENAME`: Logo file in user_files/logo/ directory
+- `LOGO_FILENAME`: Logo file in `overrides/logo/` directory (see step 3)
 - `PRIMARY_COLOR`: Primary brand color (hex without #, e.g., `0d6efd`)
 - `SECONDARY_COLOR`: Secondary brand color (hex without #, e.g., `6610f2`)
 
 Optional SSO integration:
 - `SSO_LOGOUT_URL`: Logout URL for upstream SSO proxy (see [SSO Logout](#sso-logout))
 
-### 3. Add Logo (Optional)
+### 3. Customize Branding (Optional)
+
+The application supports organization-specific customization via a `docker-compose.override.yml` file that mounts your files into the container:
 
 ```bash
-cp /path/to/your/logo.png apps/deepl/deeplFrontend/static/logo/
+# Set up the override mechanism
+cp docker-compose.override.yml.example docker-compose.override.yml
+
+# Add your logo
+cp /path/to/your/logo.png overrides/logo/logo.png
 # Update LOGO_FILENAME in env/deepl.env
+
+# Customize the about page texts
+# Edit overrides/about/about_de.md and overrides/about/about_en.md
 ```
+
+See [overrides/README.md](overrides/README.md) for details on what can be customized.
 
 ### 4. Run with Docker Compose
 
@@ -163,7 +174,7 @@ docker-compose up -d
 
 The application will be available at `http://localhost:8000` (or configured domain).
 
-**For detailed Docker documentation**, see [DOCKER.md](DOCKER.md).
+**For detailed Docker documentation**, see [docs/DOCKER.md](docs/DOCKER.md).
 
 ### 5. Create Database and Run Migrations
 
@@ -277,7 +288,7 @@ docker-compose exec deepl python manage.py glossary_list --verbose
 docker-compose exec deepl python manage.py glossary_remove "Name"
 ```
 
-See [GLOSSARY_MANAGEMENT.md](GLOSSARY_MANAGEMENT.md) for complete documentation.
+See [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) for complete documentation.
 
 ## Configuration Reference
 
@@ -330,9 +341,18 @@ The application uses SQLite (`db.sqlite3`) as its database:
 
 ### Running Tests
 
+Tests use pytest with mocked DeepL API calls (no API key needed):
+
 ```bash
-python manage.py test deeplFrontend
+# With Docker (recommended)
+docker-compose exec deepl pip install -r requirements-test.txt
+docker-compose exec deepl python -m pytest -v
+
+# With coverage
+docker-compose exec deepl python -m pytest --cov=deeplFrontend --cov-report=term-missing
 ```
+
+Tests also run automatically via GitHub Actions on push/PR. See [docs/TESTING.md](docs/TESTING.md) for details.
 
 ### Code Style
 
@@ -352,25 +372,45 @@ python manage.py migrate
 ## Project Structure
 
 ```
-poc-deepl/
-├── apps/deepl/              # Django application
-│   ├── deeplFrontend/       # Main app
-│   │   ├── management/      # Custom management commands
-│   │   ├── static/          # Static files (CSS, JS, logos)
-│   │   ├── templates/       # HTML templates
-│   │   ├── models.py        # Database models
-│   │   ├── views.py         # View logic
-│   │   └── forms.py         # Form definitions
-│   ├── config/              # Django project settings
-│   ├── manage.py            # Django management script
-│   └── requirements.txt     # Python dependencies
-├── env/                     # Environment configuration
-│   └── deepl.env.sample     # Sample environment file
-├── nginx/                   # Nginx configuration
-├── docker-compose.yml       # Docker orchestration
-├── Dockerfile               # Django container
-└── GLOSSARY_MANAGEMENT.md   # Glossary documentation
+.
+├── apps/deepl/                          # Django application
+│   ├── config/                          # Django project settings
+│   ├── data/about/                      # Default about page texts (built into image)
+│   ├── deeplFrontend/                   # Main app
+│   │   ├── management/                  # Custom management commands
+│   │   ├── static/                      # Static files (CSS, JS, logos)
+│   │   ├── templates/                   # HTML templates
+│   │   ├── models.py                    # Database models
+│   │   ├── views.py                     # View logic
+│   │   └── forms.py                     # Form definitions
+│   ├── manage.py                        # Django management script
+│   └── requirements.txt                 # Python dependencies
+├── env/                                 # Environment configuration
+│   └── deepl.env.sample                 # Sample environment file
+├── nginx/                               # Nginx configuration
+├── overrides/                           # Organization-specific customizations
+│   ├── about/                           # Custom about page texts
+│   └── logo/                            # Custom logo
+├── docs/                                # Documentation
+│   ├── DOCKER.md                        # Docker deployment guide
+│   ├── GLOSSARY_MANAGEMENT.md           # Glossary documentation
+│   ├── DESIGN_PRINCIPLES.md             # Design principles
+│   └── TESTING.md                       # Testing guide
+├── docker-compose.yml                   # Docker orchestration
+└── docker-compose.override.yml.example  # Override template for customization
 ```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/DOCKER.md](docs/DOCKER.md) | Docker deployment guide |
+| [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) | Glossary management |
+| [docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) | Design principles |
+| [docs/TESTING.md](docs/TESTING.md) | Testing guide |
+| [overrides/README.md](overrides/README.md) | Organization-specific customization |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+| [SECURITY.md](SECURITY.md) | Security policy |
 
 ## Contributing
 
@@ -396,13 +436,27 @@ This project was originally developed at the Alfred Wegener Institute for Polar 
 
 For issues and questions:
 - Check the [Troubleshooting](#troubleshooting) section
-- Review [GLOSSARY_MANAGEMENT.md](GLOSSARY_MANAGEMENT.md) for glossary issues
+- Review [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) for glossary issues
 - Check application logs for detailed error messages
 - See [SECURITY.md](SECURITY.md) for security-related issues
 - Consult [Django documentation](https://docs.djangoproject.com/)
 - Consult [DeepL API documentation](https://www.deepl.com/docs-api)
 
 ## Changelog
+
+### Version 2.3 (February 2026)
+- Added automated test suite with pytest (model, form, view, URL, template tag tests)
+- Added GitHub Actions CI workflow (Python 3.11/3.12 matrix)
+- Added test settings, pytest configuration, and test dependencies
+- Added docs/TESTING.md documentation
+- Removed completed TODO.md and LICENSE_INFO_COLLECTION.md
+
+### Version 2.2 (February 2026)
+- Introduced overrides/ directory for organization-specific customization (logo, about texts)
+- Added docker-compose.override.yml.example for transparent override mounting
+- Improved about page texts with clearer benefits and privacy information
+- Removed direct user_files/ volume mounts from docker-compose.yml
+- Moved documentation files into docs/ directory
 
 ### Version 2.1 (January 2026)
 - Added corporate identity customization (colors, logo via environment)

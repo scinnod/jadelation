@@ -83,6 +83,15 @@ htmlcov/
 user_files/
 
 # ========================
+# Overrides (organization-specific customizations)
+# ========================
+# The overrides/ directory structure (.gitkeep files and README) is tracked,
+# but actual content files (logos, about texts, etc.) are not.
+overrides/**
+!overrides/README.md
+!overrides/**/.gitkeep
+
+# ========================
 # Backups
 # ========================
 *.bak

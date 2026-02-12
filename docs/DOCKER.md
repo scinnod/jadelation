@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sc
 
 This document provides detailed information about the Docker deployment setup for the DeepL Translation Frontend.
 
-> ⚠️ **IMPORTANT**: This service provides access to your DeepL API key. It MUST be deployed behind an authentication proxy. See [SECURITY.md](SECURITY.md) for details.
+> ⚠️ **IMPORTANT**: This service provides access to your DeepL API key. It MUST be deployed behind an authentication proxy. See [SECURITY.md](../SECURITY.md) for details.
 
 ## Architecture Overview
 
@@ -151,6 +151,10 @@ The application uses a multi-container Docker setup:
 - `logs`: Application logs
 - `staticfiles`: Collected static files
 
+**Optional Override Volumes** (via `docker-compose.override.yml`):
+- `./overrides/about` → `/app/data/about`: Organization-specific about page texts
+- `./overrides/logo` → `/app/static/logo`: Organization logo
+
 **Environment Variables**:
 - From `env/deepl.env` file
 - `SECRET_KEY_FILE`: Path to secret key file
@@ -193,6 +197,37 @@ The application uses a multi-container Docker setup:
 **Contents**: CSS, JavaScript, images, etc.
 
 **Note**: Can be regenerated with `collectstatic`
+
+## Organization-Specific Customization
+
+The application ships with generic default texts and no logo. Organizations can customize these by using Docker Compose's override mechanism:
+
+### Setup
+
+```bash
+# Copy the example override file
+cp docker-compose.override.yml.example docker-compose.override.yml
+
+# Add your about texts and logo to the overrides/ directory
+# Edit overrides/about/about_de.md and overrides/about/about_en.md
+# Copy your logo to overrides/logo/
+
+# Start (override is automatically merged)
+docker-compose up -d
+```
+
+### How It Works
+
+The `docker-compose.override.yml` mounts files from `overrides/` into the container, replacing the built-in defaults:
+
+| Override Location | Container Path | Purpose |
+|-------------------|---------------|---------|
+| `overrides/about/` | `/app/data/about/` | About page content (Markdown) |
+| `overrides/logo/` | `/app/static/logo/` | Organization logo |
+
+The `overrides/` directory structure is tracked in version control (via `.gitkeep` files), but the actual content files are gitignored to keep organization-specific data out of the repository.
+
+See [overrides/README.md](../overrides/README.md) for details.
 
 ## Secret Key Management
 

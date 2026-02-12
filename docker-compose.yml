@@ -44,13 +44,10 @@ services:
       # Application code (for development - remove in production)
       # - ./apps/deepl:/app
       
-      # User-editable content
-      # Customize the 'About' section by editing markdown files in ./data/about/
-      # Files: about_en.md, about_de.md (add about_XX.md for other languages)
-      - ./user_files/about:/app/data/about
+      # Organization-specific content (about texts, logo) can be customized
+      # via docker-compose.override.yml - see docker-compose.override.yml.example
+      # and overrides/README.md for details.
       
-      # User-defined logo
-      - ./user_files/logo:/app/static/logo
       # Persistent data volumes (managed by Docker)
       # To customize paths, modify these volume mounts:
       - secrets:/secrets                  # Secret key storage (outside app dir)

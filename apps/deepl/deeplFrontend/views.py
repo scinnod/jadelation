@@ -61,8 +61,14 @@ def load_glossaries():
                 # Fetch the glossary object from DeepL API
                 deepl_glossary = translator.get_glossary(db_glossary.glossary_id)
                 
-                # Store in cache using language pair as key
-                cache_key = f"{db_glossary.source_lang}->{db_glossary.target_lang}"
+                # Store in cache using normalised language pair as key
+                # Normalise to 2-letter codes (e.g. EN-GB -> EN) so that
+                # lookups from the translation view always match,
+                # regardless of whether the glossary was uploaded with
+                # a regional variant code or a plain language code.
+                norm_source = db_glossary.source_lang[:2].upper()
+                norm_target = db_glossary.target_lang[:2].upper()
+                cache_key = f"{norm_source}->{norm_target}"
                 glossary_cache[cache_key] = deepl_glossary
                 
                 logger.info(
@@ -158,13 +164,17 @@ def deepl_translation(request):
                 target_lang = lang_pair[1]
                 formality = direction_parts[1] if len(direction_parts[1]) > 0 else None
                 
+                # Look up glossary using normalised 2-letter codes
+                # (e.g. "DE->EN" not "DE->EN-GB") to match the cache keys
+                glossary_key = f"{source_lang[:2]}->{target_lang[:2]}"
+                
                 try:
                     result = translator.translate_text(
                         form.cleaned_data["sourceText"],
                         source_lang=source_lang,
                         target_lang=target_lang,
                         formality=formality,
-                        glossary=glossary.get(f"{source_lang}->{target_lang}", None),
+                        glossary=glossary.get(glossary_key, None),
                     )
                     translation = result.text
                     
