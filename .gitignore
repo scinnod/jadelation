@@ -157,7 +157,8 @@ Desktop.ini
 !.gitignore
 
 # ========================
-# Optional: Ignore all other hidden files except .gitignore
+# Optional: Ignore all other hidden files except .gitignore and .github
 # ========================
 .*
 !.gitignore
+!.github/
