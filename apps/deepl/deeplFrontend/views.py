@@ -57,9 +57,10 @@ class _GlossaryCache:
     to ``deepl.GlossaryInfo`` objects fetched from the DeepL API.
     """
 
-    def __init__(self):
+    def __init__(self, translator_factory=None):
         self._cache = {}
         self._loaded_at = 0.0  # epoch – forces first load
+        self._translator_factory = translator_factory
 
     # ------------------------------------------------------------------
     # public helpers
@@ -102,7 +103,10 @@ class _GlossaryCache:
         new_cache = {}
 
         try:
-            translator = deepl.Translator(settings.DEEPL_AUTHKEY)
+            if self._translator_factory:
+                translator = self._translator_factory()
+            else:
+                translator = deepl.Translator(settings.DEEPL_AUTHKEY)
             db_glossaries = Glossary.objects.all()
 
             for db_glossary in db_glossaries:

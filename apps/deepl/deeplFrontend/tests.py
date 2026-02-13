@@ -525,8 +525,8 @@ class TranslationViewPostTest(TestCase):
         )
 
     @patch("deeplFrontend.views.deepl.Translator")
-    def test_post_translation_uses_quality_model(self, mock_translator_cls):
-        """Test that the actual translation uses the prefer_quality_optimized model type."""
+    def test_post_translation_uses_configured_model(self, mock_translator_cls):
+        """Test that the actual translation uses the configured model type."""
         mock_translator = MagicMock()
         mock_translator_cls.return_value = mock_translator
 
@@ -545,15 +545,16 @@ class TranslationViewPostTest(TestCase):
                 "directionChoice": "DE->EN-GB|",
             })
 
+        from deeplFrontend.views import DEEPL_MODEL_TYPE_TRANSLATION
         call_kwargs = mock_translator.translate_text.call_args
         self.assertEqual(
             call_kwargs.kwargs.get("model_type"),
-            "prefer_quality_optimized",
+            DEEPL_MODEL_TYPE_TRANSLATION,
         )
 
     @patch("deeplFrontend.views.deepl.Translator")
-    def test_post_auto_detection_translation_uses_quality_model(self, mock_translator_cls):
-        """Test that after auto-detection, the actual translation also uses the quality model."""
+    def test_post_auto_detection_translation_uses_configured_model(self, mock_translator_cls):
+        """Test that after auto-detection, the actual translation uses the configured model."""
         mock_translator = MagicMock()
         mock_translator_cls.return_value = mock_translator
 
@@ -575,10 +576,11 @@ class TranslationViewPostTest(TestCase):
             })
 
         # Second call is the actual translation
+        from deeplFrontend.views import DEEPL_MODEL_TYPE_TRANSLATION
         translation_call = mock_translator.translate_text.call_args_list[1]
         self.assertEqual(
             translation_call.kwargs.get("model_type"),
-            "prefer_quality_optimized",
+            DEEPL_MODEL_TYPE_TRANSLATION,
         )
 
     @patch("deeplFrontend.views.deepl.Translator")
@@ -942,74 +944,66 @@ class GlossaryCacheTest(TestCase):
             entry_count=5,
         )
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_lazy_load_on_first_access(self, mock_translator_cls):
+    def test_lazy_load_on_first_access(self):
         """Cache is populated lazily on the first .get() call, not at creation."""
         from .views import _GlossaryCache
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         mock_deepl_glossary = MagicMock()
         mock_translator.get_glossary.return_value = mock_deepl_glossary
+        factory = MagicMock(return_value=mock_translator)
 
-        cache = _GlossaryCache()
-        # Cache should NOT have called the API yet
-        mock_translator_cls.assert_not_called()
+        cache = _GlossaryCache(translator_factory=factory)
+        # Cache should NOT have called the factory yet
+        factory.assert_not_called()
 
         # First .get() triggers loading
         result = cache.get("DE->EN")
         self.assertEqual(result, mock_deepl_glossary)
         mock_translator.get_glossary.assert_called_once_with("cache-test-id")
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_normalises_keys_to_two_letter_codes(self, mock_translator_cls):
+    def test_normalises_keys_to_two_letter_codes(self):
         """Cache keys are normalised to 2-letter codes (e.g. DE->EN, not DE->EN-GB)."""
         from .views import _GlossaryCache
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         mock_translator.get_glossary.return_value = MagicMock()
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         self.assertIsNotNone(cache.get("DE->EN"))
         self.assertIsNone(cache.get("DE->EN-GB"))
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_cache_ttl_refresh(self, mock_translator_cls):
+    def test_cache_ttl_refresh(self):
         """Cache refreshes after TTL expires."""
         from .views import _GlossaryCache
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         first_glossary = MagicMock(name="first")
         second_glossary = MagicMock(name="second")
         mock_translator.get_glossary.side_effect = [first_glossary, second_glossary]
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         self.assertEqual(cache.get("DE->EN"), first_glossary)
 
         # Simulate TTL expiry by backdating _loaded_at
         cache._loaded_at = 0.0
         self.assertEqual(cache.get("DE->EN"), second_glossary)
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_reload_forces_refresh(self, mock_translator_cls):
+    def test_reload_forces_refresh(self):
         """Manual reload() forces an immediate refresh."""
         from .views import _GlossaryCache
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         first_glossary = MagicMock(name="first")
         second_glossary = MagicMock(name="second")
         mock_translator.get_glossary.side_effect = [first_glossary, second_glossary]
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         cache.get("DE->EN")  # initial load
         cache.reload()       # forced refresh
         self.assertEqual(cache.get("DE->EN"), second_glossary)
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_loaded_pairs_property(self, mock_translator_cls):
+    def test_loaded_pairs_property(self):
         """loaded_pairs returns the set of cached language-pair keys."""
         from .views import _GlossaryCache
 
@@ -1020,25 +1014,23 @@ class GlossaryCacheTest(TestCase):
         )
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         mock_translator.get_glossary.return_value = MagicMock()
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         self.assertEqual(cache.loaded_pairs, {"DE->EN", "EN->DE"})
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_api_failure_returns_empty_cache(self, mock_translator_cls):
+    def test_api_failure_returns_empty_cache(self):
         """If the DeepL API is unreachable the cache stays empty (no crash)."""
         from .views import _GlossaryCache
 
-        mock_translator_cls.side_effect = Exception("API unreachable")
+        def failing_factory():
+            raise Exception("API unreachable")
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=failing_factory)
         self.assertIsNone(cache.get("DE->EN"))
         self.assertEqual(cache.loaded_pairs, set())
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_duplicate_pair_uses_newest_glossary(self, mock_translator_cls):
+    def test_duplicate_pair_uses_newest_glossary(self):
         """When multiple glossaries exist for the same language pair,
         the most recently uploaded one is used (others are skipped)."""
         from .views import _GlossaryCache
@@ -1062,14 +1054,13 @@ class GlossaryCacheTest(TestCase):
         older_deepl = MagicMock(name="older")
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
         # Glossary.objects.all() returns newest first (-upload_date).
         # The cache should keep only the first (newest) one it encounters.
         mock_translator.get_glossary.side_effect = (
             lambda gid: newest_deepl if gid == "cache-test-id" else older_deepl
         )
 
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         result = cache.get("DE->EN")
 
         self.assertEqual(result, newest_deepl, "Should use the newest glossary")
@@ -1181,8 +1172,7 @@ class GlossaryIntegrationTest(TestCase):
         call_kwargs = mock_translator.translate_text.call_args
         self.assertIsNone(call_kwargs.kwargs.get("glossary"))
 
-    @patch("deeplFrontend.views.deepl.Translator")
-    def test_cache_normalises_keys(self, mock_translator_cls):
+    def test_cache_normalises_keys(self):
         """Test that _GlossaryCache normalises keys to 2-letter codes.
 
         This is the root cause of the glossary-not-used bug: glossaries
@@ -1193,7 +1183,6 @@ class GlossaryIntegrationTest(TestCase):
         from .views import _GlossaryCache
 
         mock_translator = MagicMock()
-        mock_translator_cls.return_value = mock_translator
 
         # Simulate a glossary fetched from DeepL API
         mock_deepl_glossary = MagicMock()
@@ -1201,7 +1190,7 @@ class GlossaryIntegrationTest(TestCase):
 
         # DB has glossary with target_lang "EN-GB" (regional variant)
         # _GlossaryCache should normalise to "DE->EN"
-        cache = _GlossaryCache()
+        cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         self.assertIsNotNone(cache.get("DE->EN"))
         self.assertIsNone(cache.get("DE->EN-GB"))
         self.assertEqual(cache.get("DE->EN"), mock_deepl_glossary)
