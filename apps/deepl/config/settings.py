@@ -131,11 +131,15 @@ STATISTICS_YEARS = int(os.getenv("STATISTICS_YEARS", "5"))
 # DEEPL_MODEL_TYPE_DETECTION  – used for the short auto-detection snippet
 #   where only detected_source_lang matters and speed is preferred.
 #   Hardcoded to "latency_optimized" (no reason to change this).
-# DEEPL_MODEL_TYPE_TRANSLATION – used for the actual translation request
-#   where output quality matters most.  Configurable via env var so
-#   operators can trade quality for speed if needed.
+# DEEPL_MODEL_TYPE_TRANSLATION – used for the actual translation request.
+#   Configurable via env var.  Defaults to "latency_optimized" because
+#   next-gen / quality_optimized models ignore the split_sentences
+#   parameter and force split_sentences=0, which strips line breaks and
+#   whitespace structure from the output.  Switch to
+#   "prefer_quality_optimized" only if formatting fidelity is not
+#   important for your use case.
 DEEPL_MODEL_TYPE_DETECTION = "latency_optimized"
-DEEPL_MODEL_TYPE_TRANSLATION = os.getenv("DEEPL_MODEL_TYPE_TRANSLATION", "prefer_quality_optimized")
+DEEPL_MODEL_TYPE_TRANSLATION = os.getenv("DEEPL_MODEL_TYPE_TRANSLATION", "latency_optimized")
 
 # Allowed hosts - must be set for production
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
