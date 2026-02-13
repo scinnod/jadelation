@@ -985,8 +985,8 @@ class GlossaryCacheTest(TestCase):
         cache = _GlossaryCache(translator_factory=lambda: mock_translator)
         self.assertEqual(cache.get("DE->EN"), first_glossary)
 
-        # Simulate TTL expiry by backdating _loaded_at
-        cache._loaded_at = 0.0
+        # Simulate TTL expiry (float('-inf') guarantees reload on any system)
+        cache._loaded_at = float('-inf')
         self.assertEqual(cache.get("DE->EN"), second_glossary)
 
     def test_reload_forces_refresh(self):

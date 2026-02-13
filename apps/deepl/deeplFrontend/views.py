@@ -59,7 +59,7 @@ class _GlossaryCache:
 
     def __init__(self, translator_factory=None):
         self._cache = {}
-        self._loaded_at = 0.0  # epoch – forces first load
+        self._loaded_at = float('-inf')  # guarantees first _ensure_loaded() triggers
         self._translator_factory = translator_factory
 
     # ------------------------------------------------------------------
