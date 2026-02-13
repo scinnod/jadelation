@@ -33,9 +33,14 @@ STATISTICS_DAYS = getattr(settings, 'STATISTICS_DAYS', 31)
 STATISTICS_MONTHS = getattr(settings, 'STATISTICS_MONTHS', 24)
 STATISTICS_YEARS = getattr(settings, 'STATISTICS_YEARS', 5)
 
-# Time-to-live for the glossary cache in seconds (default: 10 minutes).
+# DeepL model type for auto-detection vs. actual translation.
+# Empty string means "let the API decide" (omit the parameter).
+DEEPL_MODEL_TYPE_DETECTION = getattr(settings, 'DEEPL_MODEL_TYPE_DETECTION', '') or None
+DEEPL_MODEL_TYPE_TRANSLATION = getattr(settings, 'DEEPL_MODEL_TYPE_TRANSLATION', '') or None
+
+# Time-to-live for the glossary cache in seconds (default: 1 hour).
 # The cache is refreshed lazily on the next translation request after expiry.
-GLOSSARY_CACHE_TTL = getattr(settings, 'GLOSSARY_CACHE_TTL', 600)
+GLOSSARY_CACHE_TTL = getattr(settings, 'GLOSSARY_CACHE_TTL', 3600)
 
 
 class _GlossaryCache:
@@ -195,6 +200,7 @@ def deepl_translation(request):
                     result = translator.translate_text(
                         form.cleaned_data["sourceText"][:TRANSLATION_DETECTION_LEN],
                         target_lang="DE",
+                        model_type=DEEPL_MODEL_TYPE_DETECTION,
                     )
                     character_count += min(
                         len(form.cleaned_data["sourceText"]), 
@@ -259,6 +265,7 @@ def deepl_translation(request):
                         target_lang=target_lang,
                         formality=formality,
                         glossary=active_glossary,
+                        model_type=DEEPL_MODEL_TYPE_TRANSLATION,
                     )
                     translation = result.text
                     

@@ -495,6 +495,93 @@ class TranslationViewPostTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch("deeplFrontend.views.deepl.Translator")
+    def test_post_auto_detection_uses_latency_model(self, mock_translator_cls):
+        """Test that auto-detection uses the latency-optimized model type."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        mock_detect = MagicMock()
+        mock_detect.detected_source_lang = "DE"
+        mock_translate = MagicMock()
+        mock_translate.text = "Translated"
+        mock_translator.translate_text.side_effect = [mock_detect, mock_translate]
+
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        with self._patch_empty_glossary():
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Hallo Welt",
+                "directionChoice": "auto",
+            })
+
+        # First call is the detection call
+        detection_call = mock_translator.translate_text.call_args_list[0]
+        self.assertEqual(
+            detection_call.kwargs.get("model_type"),
+            "latency_optimized",
+        )
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_post_translation_uses_quality_model(self, mock_translator_cls):
+        """Test that the actual translation uses the prefer_quality_optimized model type."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        with self._patch_empty_glossary():
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Hallo Welt",
+                "directionChoice": "DE->EN-GB|",
+            })
+
+        call_kwargs = mock_translator.translate_text.call_args
+        self.assertEqual(
+            call_kwargs.kwargs.get("model_type"),
+            "prefer_quality_optimized",
+        )
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_post_auto_detection_translation_uses_quality_model(self, mock_translator_cls):
+        """Test that after auto-detection, the actual translation also uses the quality model."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        mock_detect = MagicMock()
+        mock_detect.detected_source_lang = "EN"
+        mock_translate = MagicMock()
+        mock_translate.text = "Guten Morgen"
+        mock_translator.translate_text.side_effect = [mock_detect, mock_translate]
+
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        with self._patch_empty_glossary():
+            self.client.post(reverse("translation-form"), {
+                "sourceText": "Good morning",
+                "directionChoice": "auto",
+            })
+
+        # Second call is the actual translation
+        translation_call = mock_translator.translate_text.call_args_list[1]
+        self.assertEqual(
+            translation_call.kwargs.get("model_type"),
+            "prefer_quality_optimized",
+        )
+
+    @patch("deeplFrontend.views.deepl.Translator")
     def test_post_displays_usage_info(self, mock_translator_cls):
         """Test that successful translation displays API usage information."""
         mock_translator = MagicMock()
@@ -724,6 +811,19 @@ class SettingsTest(TestCase):
         self.assertGreater(settings.STATISTICS_DAYS, 0)
         self.assertGreater(settings.STATISTICS_MONTHS, 0)
         self.assertGreater(settings.STATISTICS_YEARS, 0)
+
+    def test_deepl_model_type_settings_exist(self):
+        """Test that DeepL model type settings are configured."""
+        self.assertTrue(hasattr(settings, "DEEPL_MODEL_TYPE_DETECTION"))
+        self.assertTrue(hasattr(settings, "DEEPL_MODEL_TYPE_TRANSLATION"))
+        self.assertIn(
+            settings.DEEPL_MODEL_TYPE_DETECTION,
+            ("", "quality_optimized", "prefer_quality_optimized", "latency_optimized"),
+        )
+        self.assertIn(
+            settings.DEEPL_MODEL_TYPE_TRANSLATION,
+            ("", "quality_optimized", "prefer_quality_optimized", "latency_optimized"),
+        )
 
     def test_installed_apps_includes_app(self):
         """Test that deeplFrontend is in INSTALLED_APPS."""

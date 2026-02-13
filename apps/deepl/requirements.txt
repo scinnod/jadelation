@@ -10,10 +10,10 @@
 # - This ensures security patches while maintaining stability
 
 Django~=5.2.0
-gunicorn~=23.0.0
+gunicorn~=25.0.0
 django-crispy-forms~=2.3
-crispy-bootstrap5~=2024.10
+crispy-bootstrap5~=2025.6
 python-dateutil~=2.9.0
 requests~=2.32.3
-deepl~=1.18.0
+deepl~=1.28.0
 markdown~=3.7

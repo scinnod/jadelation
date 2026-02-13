@@ -118,9 +118,24 @@ SECONDARY_COLOR = os.getenv("SECONDARY_COLOR", "6610f2")  # Default Bootstrap in
 
 # Translation settings
 TRANSLATION_DETECTION_LEN = int(os.getenv("TRANSLATION_DETECTION_LEN", "30"))
+GLOSSARY_CACHE_TTL = int(os.getenv("GLOSSARY_CACHE_TTL", "3600"))  # Glossary cache TTL in seconds
 STATISTICS_DAYS = int(os.getenv("STATISTICS_DAYS", "31"))
 STATISTICS_MONTHS = int(os.getenv("STATISTICS_MONTHS", "24"))
 STATISTICS_YEARS = int(os.getenv("STATISTICS_YEARS", "5"))
+
+# DeepL model type selection.
+# Controls which translation model is used for API requests.
+# Allowed values: "quality_optimized", "prefer_quality_optimized",
+#                 "latency_optimized", or "" (empty = API default).
+#
+# DEEPL_MODEL_TYPE_DETECTION  – used for the short auto-detection snippet
+#   where only detected_source_lang matters and speed is preferred.
+#   Hardcoded to "latency_optimized" (no reason to change this).
+# DEEPL_MODEL_TYPE_TRANSLATION – used for the actual translation request
+#   where output quality matters most.  Configurable via env var so
+#   operators can trade quality for speed if needed.
+DEEPL_MODEL_TYPE_DETECTION = "latency_optimized"
+DEEPL_MODEL_TYPE_TRANSLATION = os.getenv("DEEPL_MODEL_TYPE_TRANSLATION", "prefer_quality_optimized")
 
 # Allowed hosts - must be set for production
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
