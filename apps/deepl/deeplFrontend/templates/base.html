@@ -79,10 +79,12 @@
       /* Link colors - but not secondary/muted links */
       a:not(.link-secondary):not(.text-secondary):not(.text-muted) {
         color: var(--primary-color);
+        text-decoration-color: var(--primary-color);
       }
       
       a:not(.link-secondary):not(.text-secondary):not(.text-muted):hover {
         color: color-mix(in srgb, var(--primary-color) 75%, black);
+        text-decoration-color: color-mix(in srgb, var(--primary-color) 75%, black);
       }
       
       /* Focus states for form elements - using secondary color for better UX */
