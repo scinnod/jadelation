@@ -123,6 +123,11 @@ STATISTICS_DAYS = int(os.getenv("STATISTICS_DAYS", "31"))
 STATISTICS_MONTHS = int(os.getenv("STATISTICS_MONTHS", "24"))
 STATISTICS_YEARS = int(os.getenv("STATISTICS_YEARS", "5"))
 
+# Maximum length of source text for a single translation request (in characters).
+# Set to 0 to disable the limit (default).  When set to a positive value,
+# requests exceeding this length are rejected both client-side and server-side.
+MAX_TRANSLATION_LENGTH = int(os.getenv("MAX_TRANSLATION_LENGTH", "0"))
+
 # DeepL model type selection.
 # Controls which translation model is used for API requests.
 # Allowed values: "quality_optimized", "prefer_quality_optimized",

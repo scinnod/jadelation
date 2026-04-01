@@ -235,6 +235,56 @@ class TranslationFormTest(TestCase):
         form = TranslationForm()
         self.assertFalse(form.fields["translatedText"].required)
 
+    @override_settings(MAX_TRANSLATION_LENGTH=0)
+    def test_no_length_limit_when_disabled(self):
+        """Test that form accepts any length when MAX_TRANSLATION_LENGTH is 0."""
+        long_text = "x" * 200000
+        form = TranslationForm(data={
+            "sourceText": long_text,
+            "directionChoice": "auto",
+        })
+        self.assertTrue(form.is_valid())
+
+    @override_settings(MAX_TRANSLATION_LENGTH=100)
+    def test_form_valid_under_limit(self):
+        """Test that text under the limit is accepted."""
+        form = TranslationForm(data={
+            "sourceText": "x" * 100,
+            "directionChoice": "auto",
+        })
+        self.assertTrue(form.is_valid())
+
+    @override_settings(MAX_TRANSLATION_LENGTH=100)
+    def test_form_invalid_over_limit(self):
+        """Test that text exceeding the limit is rejected."""
+        form = TranslationForm(data={
+            "sourceText": "x" * 101,
+            "directionChoice": "auto",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("sourceText", form.errors)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=100)
+    def test_form_error_message_contains_limit(self):
+        """Test that the error message mentions the character limit."""
+        form = TranslationForm(data={
+            "sourceText": "x" * 150,
+            "directionChoice": "auto",
+        })
+        form.is_valid()
+        error_message = form.errors["sourceText"][0]
+        self.assertIn("100", error_message)
+        self.assertIn("150", error_message)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=50)
+    def test_form_exact_limit_is_accepted(self):
+        """Test that text exactly at the limit is accepted."""
+        form = TranslationForm(data={
+            "sourceText": "x" * 50,
+            "directionChoice": "auto",
+        })
+        self.assertTrue(form.is_valid())
+
 
 # ============================================================================
 # URL Tests
@@ -293,6 +343,107 @@ class TranslationViewGetTest(TestCase):
         """Test that root URL redirects to translation form."""
         response = self.client.get("/", follow=False)
         self.assertEqual(response.status_code, 301)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=500)
+    def test_max_translation_length_in_context(self):
+        """Test that MAX_TRANSLATION_LENGTH is passed to the template context."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["MAX_TRANSLATION_LENGTH"], 500)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=0)
+    def test_max_translation_length_zero_in_context(self):
+        """Test that MAX_TRANSLATION_LENGTH=0 (disabled) is in context."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["MAX_TRANSLATION_LENGTH"], 0)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=500)
+    def test_char_limit_warning_in_page_when_enabled(self):
+        """Test that the character limit warning div is present when limit is set."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertContains(response, "char-limit-warning")
+
+    @override_settings(MAX_TRANSLATION_LENGTH=0)
+    def test_char_limit_warning_not_in_page_when_disabled(self):
+        """Test that the character limit warning div is absent when limit is 0."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertNotContains(response, "char-limit-warning")
+
+
+class TranslationViewMaxLengthPostTest(TestCase):
+    """Test POST requests when MAX_TRANSLATION_LENGTH is enforced."""
+
+    def setUp(self):
+        self.client = Client()
+
+    @override_settings(MAX_TRANSLATION_LENGTH=100)
+    def test_post_over_limit_rejected(self):
+        """Test that a POST with text over the limit is rejected with form errors."""
+        response = self.client.post(reverse("translation-form"), {
+            "sourceText": "x" * 101,
+            "directionChoice": "DE->EN-GB|",
+        })
+        self.assertEqual(response.status_code, 200)
+        # The form should be re-rendered (not a redirect or API call)
+        self.assertContains(response, "100")
+        # No translation record should be created
+        self.assertEqual(Translation.objects.count(), 0)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=100)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_post_under_limit_accepted(self, mock_translator_cls):
+        """Test that a POST with text under the limit proceeds normally."""
+        from .views import _GlossaryCache
+
+        empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        empty_cache._cache = {}
+        empty_cache._loaded_at = float("inf")
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        with patch("deeplFrontend.views.glossary_cache", empty_cache):
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "x" * 100,
+                "directionChoice": "DE->EN-GB|",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Translated")
+        self.assertEqual(Translation.objects.count(), 1)
+
+    @override_settings(MAX_TRANSLATION_LENGTH=0)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_post_no_limit_when_disabled(self, mock_translator_cls):
+        """Test that any length is accepted when MAX_TRANSLATION_LENGTH is 0."""
+        from .views import _GlossaryCache
+
+        empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        empty_cache._cache = {}
+        empty_cache._loaded_at = float("inf")
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        with patch("deeplFrontend.views.glossary_cache", empty_cache):
+            response = self.client.post(reverse("translation-form"), {
+                "sourceText": "x" * 200000,
+                "directionChoice": "DE->EN-GB|",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Translated")
 
 
 class TranslationViewPostTest(TestCase):
@@ -846,6 +997,12 @@ class SettingsTest(TestCase):
         self.assertIsInstance(settings.ORGANIZATION_NAME, dict)
         self.assertIn("en", settings.ORGANIZATION_NAME)
         self.assertIn("de", settings.ORGANIZATION_NAME)
+
+    def test_max_translation_length_setting_exists(self):
+        """Test that MAX_TRANSLATION_LENGTH setting exists and defaults to 0."""
+        self.assertTrue(hasattr(settings, "MAX_TRANSLATION_LENGTH"))
+        self.assertIsInstance(settings.MAX_TRANSLATION_LENGTH, int)
+        self.assertGreaterEqual(settings.MAX_TRANSLATION_LENGTH, 0)
 
 
 # ============================================================================

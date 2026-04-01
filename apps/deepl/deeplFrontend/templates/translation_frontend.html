@@ -34,6 +34,12 @@
       {# Source text input column #}
       <div class="col-12 col-lg-6 mb-4">
         {{ form.sourceText | as_crispy_field }}
+        {% if MAX_TRANSLATION_LENGTH > 0 %}
+        <div id="char-limit-warning" class="text-danger small" style="display: none; margin-top: -0.5rem; margin-bottom: 0.5rem;">
+          <strong>{% translate "Character limit exceeded!" %}</strong>
+          <span id="char-limit-detail"></span>
+        </div>
+        {% endif %}
         <input class="btn btn-primary" 
                type="submit" 
                id="submit-btn" 
@@ -100,4 +106,47 @@
       }
     });
   </script>
+
+  {% if MAX_TRANSLATION_LENGTH > 0 %}
+  {# Character limit enforcement #}
+  <style>
+    #submit-btn:disabled {
+      background-color: var(--primary-color) !important;
+      border-color: var(--primary-color) !important;
+      color: #fff !important;
+      opacity: 0.45;
+    }
+  </style>
+  <script>
+    (function () {
+      var maxLen = {{ MAX_TRANSLATION_LENGTH }};
+      var $textarea = $('#id_sourceText');
+      var $warning = $('#char-limit-warning');
+      var $detail = $('#char-limit-detail');
+      var $submit = $('#submit-btn');
+
+      function checkLength() {
+        var len = $textarea.val().length;
+        if (len > maxLen) {
+          var over = len - maxLen;
+          $detail.text(
+            '{% translate "characters" %}: ' + len + ' / ' + maxLen +
+            ' (+' + over + ')'
+          );
+          $warning.show();
+          $submit.prop('disabled', true);
+          $textarea.css('border-color', '#dc3545');
+        } else {
+          $warning.hide();
+          $submit.prop('disabled', false);
+          $textarea.css('border-color', '');
+        }
+      }
+
+      $textarea.on('input', checkLength);
+      // Also check on page load (e.g. when form is re-rendered with existing text)
+      checkLength();
+    })();
+  </script>
+  {% endif %}
 {% endblock scripts %}

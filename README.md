@@ -104,6 +104,7 @@ See [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) for detailed glos
 - HSTS support for production
 - Environment-based configuration (no credentials in code)
 - SQL injection protection via Django ORM
+- Configurable maximum translation length to limit API cost per request (`MAX_TRANSLATION_LENGTH`)
 - Comprehensive error logging
 
 ## Requirements
@@ -302,7 +303,7 @@ Key settings:
 - **Django Security**: `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`
 - **Branding**: `APP_TITLE_<LANG>`, `ORGANIZATION_NAME_<LANG>`, `FOOTER_TEXT`, `LOGO_FILENAME`
 - **Corporate Identity**: `PRIMARY_COLOR`, `SECONDARY_COLOR` (hex codes without #)
-- **Translation**: `TRANSLATION_DETECTION_LEN`, `STATISTICS_DAYS`, `STATISTICS_MONTHS`, `STATISTICS_YEARS`
+- **Translation**: `TRANSLATION_DETECTION_LEN`, `MAX_TRANSLATION_LENGTH`, `STATISTICS_DAYS`, `STATISTICS_MONTHS`, `STATISTICS_YEARS`
 - **Localization**: `TIME_ZONE`, `LANGUAGE_CODE`
 
 Note: `SECRET_KEY` is auto-generated on first run - do not configure manually.

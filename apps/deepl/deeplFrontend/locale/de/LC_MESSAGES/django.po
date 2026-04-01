@@ -266,3 +266,16 @@ msgstr "Bericht über jährliche Nutzung:"
 #: views.py:337
 msgid "Requested report not available."
 msgstr "Der angeforderte Bericht ist nicht verfügbar."
+
+#: forms.py:30
+#, python-format
+msgid "The text exceeds the maximum allowed length of %(limit)s characters (currently %(length)s characters)."
+msgstr "Der Text überschreitet die maximal zulässige Länge von %(limit)s Zeichen (aktuell %(length)s Zeichen)."
+
+#: templates/translation_frontend.html
+msgid "Character limit exceeded!"
+msgstr "Zeichenlimit überschritten!"
+
+#: templates/translation_frontend.html
+msgid "characters"
+msgstr "Zeichen"
