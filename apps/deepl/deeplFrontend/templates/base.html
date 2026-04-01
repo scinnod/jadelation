@@ -105,12 +105,12 @@
       
       {# Logo section - displayed if LOGO_FILENAME is configured #}
       {% if LOGO_FILENAME %}
-        {# Mobile-only logo (hidden on medium+ screens) #}
-        <div class="d-md-none mb-4">
+        {# Mobile-only logo: stacked above content, no float, smaller #}
+        <div class="d-md-none text-end mb-3">
           <img src="{% static 'logo/' %}{{ LOGO_FILENAME }}" 
-               class="float-end img-fluid" 
+               class="img-fluid" 
                alt="Logo" 
-               style="max-width: {{ LOGO_MAX_WIDTH }}px;">
+               style="max-width: min({{ LOGO_MAX_WIDTH }}px, 40vw);">
         </div>
         
         {# Desktop logo (hidden on small screens) #}
