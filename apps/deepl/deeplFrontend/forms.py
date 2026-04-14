@@ -59,7 +59,7 @@ class DocumentTranslationForm(forms.Form):
     document = forms.FileField(
         required=True,
         label=_("Document (.docx or .pptx)"),
-        help_text=_("Upload a Word or PowerPoint file. The document structure and formatting will be preserved."),
+        help_text=_("Upload a Word or PowerPoint file. The document structure and formatting will be preserved as far as possible."),
     )
 
     def clean_document(self):
