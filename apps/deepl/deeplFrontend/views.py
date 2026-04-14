@@ -7,21 +7,23 @@ This module provides views for the translation interface and usage statistics.
 """
 
 import logging
+import os
+import threading
 import time
-from datetime import datetime
+from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
 import deepl
 from django.conf import settings
-from django.contrib import messages
-from django.db.models import Count, Sum
-from django.http import HttpResponse
+from django.db.models import Count, F, Sum
+from django.http import HttpResponse, FileResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST, require_GET
 
-from .forms import TranslationForm
-from .models import Translation, Glossary
+from .forms import TranslationForm, DocumentTranslationForm
+from .models import Translation, Glossary, DocumentTranslationJob
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -169,6 +171,61 @@ class _GlossaryCache:
 glossary_cache = _GlossaryCache()
 
 
+def _active_job_context(request):
+    """Return template context dict for any active document-translation job.
+
+    Checks whether the current session has a PENDING, PROCESSING, or recent
+    COMPLETED/FAILED job and returns a JSON-safe dict so the frontend can
+    resume polling or show the result immediately on page load.
+    """
+    if not getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False):
+        return {}
+    session_key = getattr(request.session, 'session_key', None)
+    if not session_key:
+        return {}
+    # Look for an active (unfinished) job first, then fall back to most-recent
+    # finished job that still has a result_path (i.e. not cleaned up yet).
+    job = (
+        DocumentTranslationJob.objects.filter(
+            session_key=session_key,
+            status__in=[
+                DocumentTranslationJob.Status.PENDING,
+                DocumentTranslationJob.Status.PROCESSING,
+            ],
+        ).first()
+    )
+    if job is None:
+        # Check for a recent COMPLETED job that has not been downloaded
+        # or cleaned up yet (so the user can still access the result).
+        job = (
+            DocumentTranslationJob.objects.filter(
+                session_key=session_key,
+                status=DocumentTranslationJob.Status.COMPLETED,
+                downloaded=False,
+            )
+            .exclude(result_path="")
+            .order_by("-completed_at")
+            .first()
+        )
+    if job is None:
+        return {}
+    import json
+    data = {
+        "id": str(job.id),
+        "status": job.status,
+        "original_filename": job.original_filename,
+    }
+    if job.status == DocumentTranslationJob.Status.COMPLETED:
+        data.update({
+            "characters": job.characters,
+            "duration_seconds": job.duration_seconds,
+            "file_size": job.file_size,
+        })
+    elif job.status == DocumentTranslationJob.Status.FAILED:
+        data["error_message"] = job.error_message or ""
+    return {"active_doc_job_json": json.dumps(data)}
+
+
 def deepl_translation(request):
     """
     Handle DeepL translation requests.
@@ -176,6 +233,13 @@ def deepl_translation(request):
     Supports automatic language detection and translation between German and English.
     Logs all translations to the database for usage tracking.
     """
+    # Lazily clean up expired document translation files
+    if getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False):
+        try:
+            _cleanup_stale_document_jobs()
+        except Exception:
+            pass  # never let cleanup break the main page
+
     if request.method == "POST":
         form = TranslationForm(request.POST)
         if form.is_valid():
@@ -332,7 +396,8 @@ def deepl_translation(request):
             return render(
                 request,
                 "translation_frontend.html",
-                {"form": return_form, "usage": usage_str},
+                {"form": return_form, "usage": usage_str, "doc_form": DocumentTranslationForm(),
+                 **_active_job_context(request)},
             )
         else:
             # Form is not valid - render with errors
@@ -345,7 +410,8 @@ def deepl_translation(request):
     return render(
         request,
         "translation_frontend.html",
-        {"form": form},
+        {"form": form, "doc_form": DocumentTranslationForm(),
+         **_active_job_context(request)},
     )
 
 
@@ -475,3 +541,607 @@ def deepl_daily_statistics(request, granularity):
             "dformat": dformat,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Document translation (docx / pptx)
+# ---------------------------------------------------------------------------
+
+def _translate_text_fragment(translator, text, source_lang, target_lang,
+                             formality, glossary, model_type, deadline=None):
+    """Translate a single text fragment via the DeepL API.
+
+    Returns the translated string, or the original text if the fragment
+    is empty / whitespace-only.  Raises ``TimeoutError`` when *deadline*
+    (a ``time.monotonic()`` value) has been reached.
+    """
+    if deadline and time.monotonic() > deadline:
+        raise TimeoutError("Document translation wall-time limit exceeded.")
+    if not text or not text.strip():
+        return text
+    result = translator.translate_text(
+        text,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        formality=formality,
+        glossary=glossary,
+        model_type=model_type,
+    )
+    return result.text
+
+
+def _translate_docx(filepath, translator, source_lang, target_lang,
+                    formality, glossary, model_type, deadline=None):
+    """Translate all text in a .docx file **in-place**.
+
+    Paragraphs from the document body, headers, footers, and tables are
+    processed.  The full paragraph text is translated as a single unit
+    (giving the translator proper sentence context) and placed into the
+    first run.  Remaining runs are emptied so that the first run's
+    character formatting is applied to the whole translated text.
+
+    Word often splits visually identical text across many runs due to
+    editing-history tracking (rsid attributes), spell-check state, etc.
+    Translating per-run would (a) send tiny fragments to the API –
+    degrading translation quality – and (b) lose inter-run whitespace
+    because the API trims leading/trailing spaces from short fragments.
+
+    Returns ``(char_count, api_calls)``.
+    """
+    from docx import Document
+
+    doc = Document(filepath)
+    char_count = 0
+    api_calls = 0
+
+    def translate_paragraph(para):
+        nonlocal char_count, api_calls
+        runs = para.runs
+        if not runs:
+            return
+        full_text = "".join(run.text for run in runs)
+        if not full_text or not full_text.strip():
+            return
+        char_count += len(full_text)
+        api_calls += 1
+        translated = _translate_text_fragment(
+            translator, full_text,
+            source_lang, target_lang,
+            formality, glossary, model_type,
+            deadline=deadline,
+        )
+        # Place translated text in first run, clear the rest
+        runs[0].text = translated
+        for run in runs[1:]:
+            run.text = ""
+
+    # Body paragraphs
+    for para in doc.paragraphs:
+        translate_paragraph(para)
+
+    # Tables
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    translate_paragraph(para)
+
+    # Headers and footers
+    for section in doc.sections:
+        for header_footer in (section.header, section.footer):
+            if header_footer is not None:
+                for para in header_footer.paragraphs:
+                    translate_paragraph(para)
+
+    doc.save(filepath)
+    return char_count, api_calls
+
+
+def _translate_pptx(filepath, translator, source_lang, target_lang,
+                    formality, glossary, model_type, deadline=None):
+    """Translate all text in a .pptx file **in-place**.
+
+    Every text frame on every slide (including grouped shapes, tables and
+    notes) is processed.  The full paragraph text is translated as a
+    single unit and placed into the first run; remaining runs are emptied.
+    See ``_translate_docx`` for the rationale.
+
+    Returns ``(char_count, api_calls)``.
+    """
+    from pptx import Presentation
+
+    prs = Presentation(filepath)
+    char_count = 0
+    api_calls = 0
+
+    def translate_paragraph(para):
+        nonlocal char_count, api_calls
+        runs = para.runs
+        if not runs:
+            return
+        full_text = "".join(run.text for run in runs)
+        if not full_text or not full_text.strip():
+            return
+        char_count += len(full_text)
+        api_calls += 1
+        translated = _translate_text_fragment(
+            translator, full_text,
+            source_lang, target_lang,
+            formality, glossary, model_type,
+            deadline=deadline,
+        )
+        runs[0].text = translated
+        for run in runs[1:]:
+            run.text = ""
+
+    def process_shape(shape):
+        """Recursively process shapes, including groups and tables."""
+        if shape.has_text_frame:
+            for para in shape.text_frame.paragraphs:
+                translate_paragraph(para)
+        if shape.has_table:
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    for para in cell.text_frame.paragraphs:
+                        translate_paragraph(para)
+        if hasattr(shape, "shapes"):
+            # Group shape – recurse into children
+            for child in shape.shapes:
+                process_shape(child)
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            process_shape(shape)
+
+        # Slide notes
+        if slide.has_notes_slide:
+            for para in slide.notes_slide.notes_text_frame.paragraphs:
+                translate_paragraph(para)
+
+    prs.save(filepath)
+    return char_count, api_calls
+
+
+def _lang_suffix(target_lang):
+    """Return a short language suffix for the output filename."""
+    return target_lang[:2].lower()
+
+
+# ---------------------------------------------------------------------------
+# Document character counting (pre-flight check)
+# ---------------------------------------------------------------------------
+
+def _count_chars_docx(filepath):
+    """Return the total character count of a .docx file (without translating)."""
+    from docx import Document
+
+    doc = Document(filepath)
+    total = 0
+
+    def count_paragraph(para):
+        nonlocal total
+        text = "".join(run.text for run in para.runs)
+        if text and text.strip():
+            total += len(text)
+
+    for para in doc.paragraphs:
+        count_paragraph(para)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    count_paragraph(para)
+    for section in doc.sections:
+        for header_footer in (section.header, section.footer):
+            if header_footer is not None:
+                for para in header_footer.paragraphs:
+                    count_paragraph(para)
+    return total
+
+
+def _count_chars_pptx(filepath):
+    """Return the total character count of a .pptx file (without translating)."""
+    from pptx import Presentation
+
+    prs = Presentation(filepath)
+    total = 0
+
+    def count_paragraph(para):
+        nonlocal total
+        text = "".join(run.text for run in para.runs)
+        if text and text.strip():
+            total += len(text)
+
+    def process_shape(shape):
+        if shape.has_text_frame:
+            for para in shape.text_frame.paragraphs:
+                count_paragraph(para)
+        if shape.has_table:
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    for para in cell.text_frame.paragraphs:
+                        count_paragraph(para)
+        if hasattr(shape, "shapes"):
+            for child in shape.shapes:
+                process_shape(child)
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            process_shape(shape)
+        if slide.has_notes_slide:
+            for para in slide.notes_slide.notes_text_frame.paragraphs:
+                count_paragraph(para)
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Stale document job cleanup
+# ---------------------------------------------------------------------------
+
+_DOC_JOB_MAX_AGE_MINUTES = 10
+
+
+def _cleanup_stale_document_jobs():
+    """Delete translated files older than *_DOC_JOB_MAX_AGE_MINUTES* minutes.
+
+    Called lazily when the translation form is loaded – no background
+    process required.
+    """
+    cutoff = timezone.now() - timedelta(minutes=_DOC_JOB_MAX_AGE_MINUTES)
+    stale = DocumentTranslationJob.objects.filter(
+        created_at__lt=cutoff,
+    ).exclude(result_path="")
+
+    for job in stale:
+        _delete_job_file(job)
+
+
+def _delete_job_file(job):
+    """Remove the translated file from disk (if it exists)."""
+    if job.result_path:
+        full = os.path.join(settings.MEDIA_ROOT, job.result_path)
+        if os.path.isfile(full):
+            try:
+                os.remove(full)
+            except OSError:
+                pass
+        # Also remove the parent directory if empty
+        parent = os.path.dirname(full)
+        try:
+            os.rmdir(parent)
+        except OSError:
+            pass
+        job.result_path = ""
+        job.save(update_fields=["result_path"])
+
+
+def _doc_upload_dir():
+    """Return (and create) the base directory for translated documents."""
+    d = os.path.join(settings.MEDIA_ROOT, "doc_translations")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+# ---------------------------------------------------------------------------
+# Background translation worker
+# ---------------------------------------------------------------------------
+
+def _run_translation_job(job_id):
+    """Execute the translation in a background thread.
+
+    Reads the uploaded file from disk, translates it, and updates the
+    ``DocumentTranslationJob`` row with the result metadata.
+    """
+    import django
+    django.db.connections.close_all()
+
+    try:
+        job = DocumentTranslationJob.objects.get(pk=job_id)
+    except DocumentTranslationJob.DoesNotExist:
+        return
+
+    job.status = DocumentTranslationJob.Status.PROCESSING
+    job.save(update_fields=["status"])
+
+    src_path = os.path.join(settings.MEDIA_ROOT, job.result_path)
+    if not os.path.isfile(src_path):
+        job.status = DocumentTranslationJob.Status.FAILED
+        job.error_message = str(_("Upload file not found on disk."))
+        job.save(update_fields=["status", "error_message"])
+        return
+
+    start = time.monotonic()
+    timeout = getattr(settings, "DOCUMENT_TRANSLATION_TIMEOUT", 180)
+    deadline = (start + timeout) if timeout > 0 else None
+
+    # Pre-flight: count characters and check against MAX_TRANSLATION_LENGTH
+    max_chars = getattr(settings, "MAX_TRANSLATION_LENGTH", 0)
+    if max_chars > 0:
+        try:
+            if job.file_type == ".docx":
+                doc_chars = _count_chars_docx(src_path)
+            else:
+                doc_chars = _count_chars_pptx(src_path)
+        except Exception as e:
+            logger.exception("Failed to count characters in document: %s", e)
+            doc_chars = 0  # allow translation to proceed if counting fails
+
+        if doc_chars > max_chars:
+            exceeded_pct = round((doc_chars - max_chars) / max_chars * 100, 1)
+            job.status = DocumentTranslationJob.Status.FAILED
+            job.error_message = str(_(
+                "The document contains %(doc_chars)s characters which exceeds "
+                "the maximum allowed limit of %(max_chars)s characters "
+                "(exceeded by %(exceeded_pct)s%%). Please use a shorter document."
+            ) % {
+                "doc_chars": f"{doc_chars:,}",
+                "max_chars": f"{max_chars:,}",
+                "exceeded_pct": exceeded_pct,
+            })
+            job.characters = doc_chars
+            job.duration_seconds = round(time.monotonic() - start, 2)
+            job.save(update_fields=[
+                "status", "error_message", "characters", "duration_seconds",
+            ])
+            _delete_job_file(job)
+            return
+
+    try:
+        translator = deepl.Translator(settings.DEEPL_AUTHKEY)
+
+        # Parse direction
+        direction_parts = job.direction.split("|")
+        lang_pair = direction_parts[0].split("->")
+        source_lang = lang_pair[0][:2]
+        target_lang = lang_pair[1]
+        formality = direction_parts[1] if len(direction_parts) > 1 and direction_parts[1] else None
+
+        glossary_key = f"{source_lang}->{target_lang[:2]}"
+        active_glossary = glossary_cache.get(glossary_key)
+        model_type = DEEPL_MODEL_TYPE_TRANSLATION
+
+        if job.file_type == ".docx":
+            char_count, api_calls = _translate_docx(
+                src_path, translator,
+                source_lang, target_lang,
+                formality, active_glossary, model_type,
+                deadline=deadline,
+            )
+        else:
+            char_count, api_calls = _translate_pptx(
+                src_path, translator,
+                source_lang, target_lang,
+                formality, active_glossary, model_type,
+                deadline=deadline,
+            )
+
+        elapsed = time.monotonic() - start
+
+        # Log translation to statistics
+        try:
+            Translation.objects.create(
+                characters=char_count,
+                direction=job.direction,
+                auto_detection=False,
+                is_document_translation=True,
+            )
+        except Exception as e:
+            logger.exception("Failed to log document translation: %s", e)
+
+        job.characters = char_count
+        job.api_calls = api_calls
+        job.duration_seconds = round(elapsed, 2)
+        job.status = DocumentTranslationJob.Status.COMPLETED
+        job.completed_at = timezone.now()
+        job.save(update_fields=[
+            "characters", "api_calls", "duration_seconds",
+            "status", "completed_at",
+        ])
+
+    except TimeoutError:
+        logger.warning(
+            "Document translation timed out after %s s (limit: %s s): %s",
+            round(time.monotonic() - start, 2), timeout, job.id,
+        )
+        job.status = DocumentTranslationJob.Status.FAILED
+        job.error_message = str(_(
+            "The document translation exceeded the maximum allowed time "
+            "of %(seconds)s seconds. Please try a smaller document."
+        ) % {"seconds": timeout})
+        job.duration_seconds = round(time.monotonic() - start, 2)
+        job.save(update_fields=["status", "error_message", "duration_seconds"])
+        _delete_job_file(job)
+    except deepl.DeepLException as e:
+        logger.error("DeepL API error during document translation: %s", e)
+        job.status = DocumentTranslationJob.Status.FAILED
+        job.error_message = str(_(
+            "The translation service returned an error. "
+            "Please try again later or check that the document "
+            "is not corrupted."
+        ))
+        job.duration_seconds = round(time.monotonic() - start, 2)
+        job.save(update_fields=["status", "error_message", "duration_seconds"])
+        _delete_job_file(job)
+    except ImportError as e:
+        logger.error("Missing library for document translation: %s", e)
+        job.status = DocumentTranslationJob.Status.FAILED
+        job.error_message = str(_(
+            "A required library for processing this file type is not installed. "
+            "Please contact the administrator."
+        ))
+        job.duration_seconds = round(time.monotonic() - start, 2)
+        job.save(update_fields=["status", "error_message", "duration_seconds"])
+        _delete_job_file(job)
+    except Exception as e:
+        logger.exception("Unexpected error during document translation: %s", e)
+        job.status = DocumentTranslationJob.Status.FAILED
+        job.error_message = str(_(
+            "An unexpected error occurred while translating the document. "
+            "Please ensure the file is a valid .docx or .pptx document "
+            "and try again."
+        ))
+        job.duration_seconds = round(time.monotonic() - start, 2)
+        job.save(update_fields=["status", "error_message", "duration_seconds"])
+        _delete_job_file(job)
+
+
+# ---------------------------------------------------------------------------
+# Document translation views
+# ---------------------------------------------------------------------------
+
+@require_POST
+def deepl_document_translation(request):
+    """Accept a document upload and start an async translation job.
+
+    Returns a JSON response with the job ID for polling.
+    """
+    if not getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False):
+        return JsonResponse({"error": _("Document translation is not enabled.")}, status=404)
+
+    form = DocumentTranslationForm(request.POST, request.FILES)
+    if not form.is_valid():
+        errors = {field: errs[0] for field, errs in form.errors.items()}
+        return JsonResponse({"errors": errors}, status=400)
+
+    # Ensure session exists (anonymous users get one too)
+    if not request.session.session_key:
+        request.session.create()
+
+    # Reject if there is already a pending or processing job for this session
+    active_job = DocumentTranslationJob.objects.filter(
+        session_key=request.session.session_key,
+        status__in=[
+            DocumentTranslationJob.Status.PENDING,
+            DocumentTranslationJob.Status.PROCESSING,
+        ],
+    ).first()
+    if active_job:
+        return JsonResponse(
+            {"error": _("A translation is already in progress. Please wait for it to finish.")},
+            status=409,
+        )
+
+    uploaded = form.cleaned_data["document"]
+    direction = form.cleaned_data["directionChoice"]
+
+    # Sanitise the filename to prevent path-traversal attacks.
+    safe_name = os.path.basename(uploaded.name)
+    if not safe_name:
+        safe_name = "document" + os.path.splitext(uploaded.name)[1].lower()
+
+    # Parse direction for the output filename
+    direction_parts = direction.split("|")
+    lang_pair = direction_parts[0].split("->")
+    target_lang = lang_pair[1]
+    ext = os.path.splitext(safe_name)[1].lower()
+    base_name = os.path.splitext(safe_name)[0]
+    out_filename = f"{base_name}_{_lang_suffix(target_lang)}{ext}"
+
+    # Create the job record
+    job = DocumentTranslationJob.objects.create(
+        session_key=request.session.session_key,
+        original_filename=safe_name,
+        file_type=ext,
+        file_size=uploaded.size,
+        direction=direction,
+        output_filename=out_filename,
+    )
+
+    # Save uploaded file to MEDIA_ROOT/doc_translations/<job_id>/
+    job_dir = os.path.join(_doc_upload_dir(), str(job.id))
+    os.makedirs(job_dir, exist_ok=True)
+    file_path = os.path.join(job_dir, safe_name)
+    with open(file_path, "wb") as f:
+        for chunk in uploaded.chunks():
+            f.write(chunk)
+
+    job.result_path = os.path.join("doc_translations", str(job.id), safe_name)
+    job.save(update_fields=["result_path"])
+
+    # Start translation in background thread
+    thread = threading.Thread(
+        target=_run_translation_job,
+        args=(job.id,),
+        daemon=True,
+    )
+    thread.start()
+
+    return JsonResponse({"job_id": str(job.id)})
+
+
+@require_GET
+def deepl_document_job_status(request, job_id):
+    """Return the current status of a translation job as JSON.
+
+    Only the session that created the job may poll it.
+    """
+    if not getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False):
+        return JsonResponse({"error": _("Document translation is not enabled.")}, status=404)
+
+    try:
+        job = DocumentTranslationJob.objects.get(pk=job_id)
+    except (DocumentTranslationJob.DoesNotExist, ValueError):
+        return JsonResponse({"error": _("Job not found.")}, status=404)
+
+    if job.session_key != request.session.session_key:
+        return JsonResponse({"error": _("Access denied.")}, status=403)
+
+    data = {
+        "status": job.status,
+        "original_filename": job.original_filename,
+        "output_filename": job.output_filename,
+    }
+    if job.status == DocumentTranslationJob.Status.COMPLETED:
+        data.update({
+            "characters": job.characters,
+            "api_calls": job.api_calls,
+            "duration_seconds": job.duration_seconds,
+            "file_type": job.file_type,
+            "file_size": job.file_size,
+        })
+    elif job.status == DocumentTranslationJob.Status.FAILED:
+        data["error_message"] = job.error_message
+
+    return JsonResponse(data)
+
+
+@require_GET
+def deepl_document_download(request, job_id):
+    """Serve the translated file and delete it from disk afterwards.
+
+    Only the session that created the job may download it.
+    """
+    if not getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False):
+        return HttpResponse(_("Document translation is not enabled."), status=404)
+
+    try:
+        job = DocumentTranslationJob.objects.get(pk=job_id)
+    except (DocumentTranslationJob.DoesNotExist, ValueError):
+        return HttpResponse(_("Job not found."), status=404)
+
+    if job.session_key != request.session.session_key:
+        return HttpResponse(_("Access denied."), status=403)
+
+    if job.status != DocumentTranslationJob.Status.COMPLETED:
+        return HttpResponse(_("File not ready."), status=409)
+
+    if not job.result_path:
+        return HttpResponse(_("File no longer available on the server."), status=410)
+
+    full_path = os.path.join(settings.MEDIA_ROOT, job.result_path)
+    if not os.path.isfile(full_path):
+        return HttpResponse(_("File no longer available on the server."), status=410)
+
+    response = FileResponse(
+        open(full_path, "rb"),
+        as_attachment=True,
+        filename=job.output_filename,
+    )
+
+    # Mark as downloaded; actual file cleanup happens via
+    # _cleanup_stale_document_jobs() on the next form load.
+    job.downloaded = True
+    job.download_count = F("download_count") + 1
+    job.save(update_fields=["downloaded", "download_count"])
+
+    return response

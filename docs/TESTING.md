@@ -178,3 +178,31 @@ docker-compose exec deepl python -m pytest --cov=deeplFrontend --cov-report=xml
 
 - **Minimum**: 70% overall coverage
 - **Target**: 85% for models and views
+
+## Test Classes Summary
+
+| Class | What It Tests |
+|---|---|
+| `TranslationModelTest` | Translation model creation, validation, ordering |
+| `GlossaryModelTest` | Glossary model creation and properties |
+| `TranslationFormTest` | Text translation form validation |
+| `DocumentTranslationFormTest` | Document form: file type/size validation, direction choices |
+| `ViewGetTest` | GET requests: form rendering, context, usage display |
+| `ViewPostTest` | POST text translation with mocked DeepL API |
+| `URLTest` | URL resolution and naming |
+| `ContextProcessorLanguageTest` | Language selection, fallback chain |
+| `CustomHelperTagsTest` | Template tags |
+| `SettingsTest` | Configuration sanity checks |
+| `GlossaryIntegrationTest` | Glossary cache interaction with translation |
+| `DocumentTranslationURLTest` | Document translation URL resolution |
+| `DocumentTranslationViewGetTest` | Tab visibility, feature toggle, form context |
+| `DocumentTranslationViewPostTest` | Async upload: JSON job creation, validation errors, API errors, single-active-job enforcement |
+| `DocumentTranslationJobModelTest` | Job model defaults, UUID PK, string repr |
+| `DocumentJobStatusEndpointTest` | Status polling: session security, status values, feature toggle |
+| `DocumentDownloadEndpointTest` | File download: serving, re-download, session security, edge cases |
+| `StaleDocumentJobCleanupTest` | 10-minute file cleanup: stale removed, recent kept |
+| `TranslateDocxHelperTest` | `_translate_docx`: paragraphs, tables, multi-run merge, char count |
+| `TranslatePptxHelperTest` | `_translate_pptx`: slides, empty slides |
+| `TranslateTextFragmentTest` | `_translate_text_fragment`: empty, whitespace, API call |
+| `LangSuffixTest` | `_lang_suffix` helper |
+| `DocumentTranslationSettingsTest` | Feature flag and context processor |

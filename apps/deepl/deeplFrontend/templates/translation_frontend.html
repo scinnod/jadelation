@@ -18,6 +18,39 @@
     </div>
   </div>
 
+  {% if DOCUMENT_TRANSLATION_ENABLED %}
+  {# ── Tabbed interface (text + document) ── #}
+  <ul class="nav nav-tabs mb-4" id="translationTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if active_tab != 'document' %}active{% endif %}" id="text-tab" data-bs-toggle="tab"
+              data-bs-target="#text-pane" type="button" role="tab" aria-controls="text-pane"
+              aria-selected="{% if active_tab != 'document' %}true{% else %}false{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-fonts me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+          <path d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479z"/>
+        </svg>
+        {% translate "Text Translation" %}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if active_tab == 'document' %}active{% endif %}" id="document-tab" data-bs-toggle="tab"
+              data-bs-target="#document-pane" type="button" role="tab" aria-controls="document-pane"
+              aria-selected="{% if active_tab == 'document' %}true{% else %}false{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-text me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+          <path d="M5.5 7a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 9.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+          <path d="M9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5zm0 1v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
+        </svg>
+        {% translate "Document Translation" %}
+        <span class="badge rounded-pill text-bg-secondary ms-1" style="font-size: 0.65em; vertical-align: middle;">beta</span>
+        <span id="doc-tab-dot" class="d-none" aria-label="{% translate 'action required' %}"></span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="translationTabContent">
+    {# ── Tab 1: Text translation ── #}
+    <div class="tab-pane fade {% if active_tab != 'document' %}show active{% endif %}" id="text-pane" role="tabpanel" aria-labelledby="text-tab">
+  {% endif %}
+
   {# Translation form #}
   <form method="post">
     {% csrf_token %}
@@ -67,6 +100,120 @@
     </div>
   {% endif %}
 
+  {% if DOCUMENT_TRANSLATION_ENABLED %}
+    </div>{# /text-pane #}
+
+    {# ── Tab 2: Document translation ── #}
+    <div class="tab-pane fade {% if active_tab == 'document' %}show active{% endif %}" id="document-pane" role="tabpanel" aria-labelledby="document-tab">
+
+      <div class="row">
+        <div class="col-12 col-lg-8">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-file-earmark-arrow-up me-2" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                  <path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707z"/>
+                  <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z"/>
+                </svg>
+                {% translate "Translate a Document" %}
+              </h5>
+              <p class="text-secondary mb-3">
+                {% translate "Upload a Word (.docx) or PowerPoint (.pptx) file. The document will be translated while preserving its structure and formatting." %}
+              </p>
+
+              {# ── Upload form ── #}
+              <div id="doc-upload-section">
+                <div id="doc-form-errors" class="alert alert-danger d-none" role="alert"></div>
+
+                <form id="doc-upload-form" enctype="multipart/form-data">
+                  {% csrf_token %}
+                  <div class="mb-3">
+                    {{ doc_form.directionChoice | as_crispy_field }}
+                  </div>
+                  <div class="mb-3">
+                    {{ doc_form.document | as_crispy_field }}
+                  </div>
+                  <button type="submit" class="btn btn-primary" id="doc-submit-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-translate me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                      <path d="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/>
+                      <path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846-.338.287-.725.535l-.262.161q.07.085.143.163 1.13-.208 1.81-.651a8 8 0 0 1-.833-.977 7 7 0 0 1-.763.97M6.938 12.3c.027.318.08.632.157.942a5 5 0 0 1-.65-.175l-.234-.074q.158-.32.297-.651l.065-.145.165.098m.261 1.141q.384.085.786.128a5 5 0 0 1-.647.092l-.139-.22m7.663-2.885a1 1 0 0 0-1-1H11v4.5a2.5 2.5 0 0 1-2.5 2.5h-4v.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1z"/>
+                    </svg>
+                    {% translate "Translate Document" %}
+                  </button>
+                </form>
+              </div>
+
+              {# ── Progress indicator (hidden initially) ── #}
+              <div id="doc-progress-section" class="d-none">
+                <div class="text-center py-4">
+                  <div class="spinner-border text-primary mb-3" role="status" style="width: 2.5rem; height: 2.5rem;">
+                    <span class="visually-hidden">{% translate "Translating…" %}</span>
+                  </div>
+                  <p class="mb-1 fw-semibold" id="doc-progress-filename"></p>
+                  <p class="text-secondary mb-0">{% translate "Translating… This may take a moment for large documents." %}</p>
+                </div>
+              </div>
+
+              {# ── Result section (hidden initially) ── #}
+              <div id="doc-result-section" class="d-none">
+                <div class="border rounded p-3">
+                  <h6 class="mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-check-circle text-success me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                      <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                      <path d="m10.97 4.97-.02.022-3.473 4.425-2.093-2.094a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-1.071-1.05"/>
+                    </svg>
+                    {% translate "Translation complete" %}
+                  </h6>
+                  <table class="table table-sm table-borderless mb-2">
+                    <tbody>
+                      <tr><td class="text-secondary pe-3">{% translate "File" %}</td><td id="res-filename" class="fw-semibold"></td></tr>
+                      <tr><td class="text-secondary pe-3">{% translate "Size" %}</td><td id="res-filesize"></td></tr>
+                      <tr><td class="text-secondary pe-3">{% translate "Characters" %}</td><td id="res-chars"></td></tr>
+                      <tr><td class="text-secondary pe-3">{% translate "Duration" %}</td><td id="res-duration"></td></tr>
+                    </tbody>
+                  </table>
+                  <a id="doc-download-btn" class="btn btn-sm" href="#">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                    </svg>
+                    {% translate "Download" %}
+                  </a>
+                  <button id="doc-new-btn" class="btn btn-outline-secondary btn-sm ms-2" type="button">
+                    {% translate "Translate another document" %}
+                  </button>
+                </div>
+              </div>
+
+              {# ── Error section (hidden initially) ── #}
+              <div id="doc-error-section" class="d-none">
+                <div class="alert alert-danger" role="alert">
+                  <strong>{% translate "Translation failed" %}:</strong>
+                  <span id="doc-error-message"></span>
+                </div>
+                <button id="doc-retry-btn" class="btn btn-outline-secondary btn-sm" type="button">
+                  {% translate "Try again" %}
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="mt-3 text-secondary">
+            <small>
+              <em>
+                {% translate "Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: 50 MB." %}
+                {% translate "The entire text of each paragraph is translated in one API call. Mixed character formatting (e.g. individual bold or italic words) within a paragraph may not be preserved." %}
+              </em>
+            </small>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /document-pane #}
+  </div>{# /tab-content #}
+  {% endif %}
+
   {# About section - loaded from markdown files #}
   <h6 class="pt-5">{% translate "About this service" %}</h6>
   <div class="fw-light">
@@ -92,8 +239,11 @@
   {# Auto-focus on source text field and move cursor to end #}
   <script>
     $(function () {
-      $("#id_sourceText").focus();
-      $("#id_sourceText").prop('selectionStart', $("#id_sourceText").val().length);
+      // Only auto-focus when text tab is active
+      if ($('#text-pane').hasClass('show') || !$('#text-pane').length) {
+        $("#id_sourceText").focus();
+        $("#id_sourceText").prop('selectionStart', $("#id_sourceText").val().length);
+      }
     });
   </script>
   
@@ -148,5 +298,219 @@
       checkLength();
     })();
   </script>
+  {% endif %}
+
+  {% if DOCUMENT_TRANSLATION_ENABLED %}
+  {# Document translation: AJAX upload, polling, download (uses native fetch, no jQuery.ajax needed) #}
+  <script>
+    $(function () {
+      var csrfToken = $('[name=csrfmiddlewaretoken]').first().val();
+      var pollTimer = null;
+      var currentJobId = null;
+
+      var $uploadSec  = $('#doc-upload-section');
+      var $progressSec = $('#doc-progress-section');
+      var $resultSec  = $('#doc-result-section');
+      var $errorSec   = $('#doc-error-section');
+      var $formErrors = $('#doc-form-errors');
+      var $submitBtn  = $('#doc-submit-btn');
+
+      // Build base URL for status/download from Django URL resolver
+      // We use a placeholder UUID and replace it with the actual job ID at runtime
+      var statusUrlTemplate = '{% url "document-job-status" "00000000-0000-0000-0000-000000000000" %}';
+      var downloadUrlTemplate = '{% url "document-download" "00000000-0000-0000-0000-000000000000" %}';
+
+      var translateBtnHtml =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-translate me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">' +
+        '<path d="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/>' +
+        '<path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846-.338.287-.725.535l-.262.161q.07.085.143.163 1.13-.208 1.81-.651a8 8 0 0 1-.833-.977 7 7 0 0 1-.763.97M6.938 12.3c.027.318.08.632.157.942a5 5 0 0 1-.65-.175l-.234-.074q.158-.32.297-.651l.065-.145.165.098m.261 1.141q.384.085.786.128a5 5 0 0 1-.647.092l-.139-.22m7.663-2.885a1 1 0 0 0-1-1H11v4.5a2.5 2.5 0 0 1-2.5 2.5h-4v.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1z"/>' +
+        '</svg>' +
+        '{% translate "Translate Document" %}';
+
+      function showSection(name) {
+        $uploadSec.toggleClass('d-none', name !== 'upload');
+        $progressSec.toggleClass('d-none', name !== 'progress');
+        $resultSec.toggleClass('d-none', name !== 'result');
+        $errorSec.toggleClass('d-none', name !== 'error');
+      }
+
+      function resetForm() {
+        showSection('upload');
+        $submitBtn.prop('disabled', false).html(translateBtnHtml);
+        $formErrors.addClass('d-none').text('');
+        $('#doc-upload-form')[0].reset();
+        currentJobId = null;
+        $('#doc-tab-dot').addClass('d-none');
+      }
+
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      // Submit form via fetch
+      $('#doc-upload-form').on('submit', function (e) {
+        e.preventDefault();
+        $formErrors.addClass('d-none');
+        $submitBtn.prop('disabled', true).html(
+          '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' +
+          '{% translate "Uploading…" %}'
+        );
+
+        var formData = new FormData(this);
+        var fileInput = document.getElementById('id_document');
+        var fileName = fileInput.files[0] ? fileInput.files[0].name : '';
+
+        fetch('{% url "document-translation" %}', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-CSRFToken': csrfToken }
+        })
+        .then(function (resp) {
+          return resp.json().then(function (data) { return { ok: resp.ok, data: data }; });
+        })
+        .then(function (result) {
+          if (result.ok) {
+            currentJobId = result.data.job_id;
+            $('#doc-progress-filename').text(fileName);
+            showSection('progress');
+            startPolling();
+            $('#doc-tab-dot').removeClass('d-none');
+          } else {
+            $submitBtn.prop('disabled', false).html(translateBtnHtml);
+            var data = result.data;
+            if (data.errors) {
+              var msgs = [];
+              for (var f in data.errors) { msgs.push(data.errors[f]); }
+              $formErrors.html(msgs.join('<br>')).removeClass('d-none');
+            } else if (data.error) {
+              $formErrors.text(data.error).removeClass('d-none');
+            }
+          }
+        })
+        .catch(function () {
+          $submitBtn.prop('disabled', false).html(translateBtnHtml);
+          $formErrors.text('{% translate "An unexpected error occurred." %}').removeClass('d-none');
+        });
+      });
+
+      // Poll for job status
+      function startPolling() {
+        pollTimer = setInterval(function () {
+          if (!currentJobId) return;
+          fetch(statusUrlTemplate.replace('00000000-0000-0000-0000-000000000000', currentJobId))
+            .then(function (resp) { return resp.json(); })
+            .then(function (data) {
+              if (data.status === 'completed') {
+                clearInterval(pollTimer);
+                $('#res-filename').text(data.original_filename);
+                $('#res-filesize').text(formatFileSize(data.file_size));
+                $('#res-chars').text(data.characters.toLocaleString());
+                $('#res-duration').text(data.duration_seconds.toFixed(1) + ' s');
+                var dlUrl = downloadUrlTemplate.replace('00000000-0000-0000-0000-000000000000', currentJobId);
+                $('#doc-download-btn').attr('href', dlUrl);
+                showSection('result');
+                $('#doc-tab-dot').removeClass('d-none');
+              } else if (data.status === 'failed') {
+                clearInterval(pollTimer);
+                $('#doc-error-message').text(data.error_message || '{% translate "Unknown error." %}');
+                showSection('error');
+                $('#doc-tab-dot').addClass('d-none');
+              }
+            })
+            .catch(function () {
+              clearInterval(pollTimer);
+              $('#doc-error-message').text('{% translate "Lost connection to the server." %}');
+              showSection('error');
+              $('#doc-tab-dot').addClass('d-none');
+            });
+        }, 1500);
+      }
+
+      // "Translate another" / "Try again" buttons
+      $('#doc-new-btn, #doc-retry-btn').on('click', resetForm);
+
+      // Hide activity dot when Download is clicked
+      $('#doc-download-btn').on('click', function () {
+        $('#doc-tab-dot').addClass('d-none');
+      });
+
+      // Resume an active job on page load (e.g. after page reload)
+      {% if active_doc_job_json %}
+      (function () {
+        var job = JSON.parse('{{ active_doc_job_json|escapejs }}');
+        if (!job || !job.id) return;
+        currentJobId = job.id;
+
+        if (job.status === 'pending' || job.status === 'processing') {
+          // Show spinner and start polling
+          $('#doc-progress-filename').text(job.original_filename);
+          showSection('progress');
+          startPolling();
+          $('#doc-tab-dot').removeClass('d-none');
+        } else if (job.status === 'completed') {
+          // Show result section with metadata
+          $('#res-filename').text(job.original_filename);
+          $('#res-filesize').text(formatFileSize(job.file_size));
+          $('#res-chars').text(job.characters.toLocaleString());
+          $('#res-duration').text(job.duration_seconds.toFixed(1) + ' s');
+          var dlUrl = downloadUrlTemplate.replace('00000000-0000-0000-0000-000000000000', job.id);
+          $('#doc-download-btn').attr('href', dlUrl);
+          showSection('result');
+          $('#doc-tab-dot').removeClass('d-none');
+        } else if (job.status === 'failed') {
+          $('#doc-error-message').text(job.error_message || '{% translate "Unknown error." %}');
+          showSection('error');
+        }
+      })();
+      {% endif %}
+    });
+  </script>
+  {# Tab + button styling to match corporate identity #}
+  <style>
+    #translationTabs .nav-link {
+      color: #6c757d;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 0.6rem 1.2rem;
+      font-weight: 500;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    #translationTabs .nav-link:hover {
+      color: var(--primary-color);
+      border-bottom-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+    }
+    #translationTabs .nav-link.active {
+      color: var(--primary-color);
+      border-bottom-color: var(--primary-color);
+      background: transparent;
+    }
+    /* Document submit button – corporate identity colours */
+    #doc-submit-btn {
+      background-color: var(--primary-color) !important;
+      border-color: var(--primary-color) !important;
+      color: #fff !important;
+    }
+    #doc-submit-btn:disabled {
+      opacity: 0.45;
+    }
+    /* Activity indicator dot on document tab */
+    #doc-tab-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    /* Download button – corporate identity colours */
+    #doc-download-btn {
+      background-color: var(--primary-color) !important;
+      border-color: var(--primary-color) !important;
+      color: #fff !important;
+    }
+  </style>
   {% endif %}
 {% endblock scripts %}

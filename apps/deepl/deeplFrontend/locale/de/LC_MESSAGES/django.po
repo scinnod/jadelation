@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-19 15:27+0100\n"
+"POT-Creation-Date: 2026-04-14 07:11+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,197 +18,340 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: forms.py:7
 msgid "auto detection"
 msgstr "automatische Erkennung"
 
-#: forms.py:8
 msgid "German -> English"
 msgstr "Deutsch -> Englisch"
 
-#: forms.py:9
 msgid "English -> German (formal)"
 msgstr "Englisch -> Deutsch (formell)"
 
-#: forms.py:10
 msgid "English -> German (less formal)"
 msgstr "Englisch -> Deutsch (informell)"
 
-#: forms.py:12
 msgid "Text for translation"
 msgstr "Text zur Übersetzung"
 
-#: forms.py:13
 msgid "Direction of translation"
 msgstr "Übersetzungsrichtung"
 
-#: forms.py:18
 msgid "DeepL translation"
 msgstr "DeepL Übersetzung"
 
-#: models.py:20
+#, python-format
+msgid ""
+"The text exceeds the maximum allowed length of %(limit)s characters "
+"(currently %(length)s characters)."
+msgstr ""
+"Der Text überschreitet die maximal zulässige Länge von %(limit)s Zeichen "
+"(aktuell %(length)s Zeichen)."
+
+msgid "— Please select —"
+msgstr "— Bitte auswählen —"
+
+msgid "Document (.docx or .pptx)"
+msgstr "Dokument (.docx oder .pptx)"
+
+msgid ""
+"Upload a Word or PowerPoint file. The document structure and formatting will "
+"be preserved."
+msgstr ""
+"Laden Sie eine Word- oder PowerPoint-Datei hoch. Dokumentstruktur und "
+"Formatierung bleiben erhalten."
+
+#, python-format
+msgid "Unsupported file type '%(ext)s'. Please upload a .docx or .pptx file."
+msgstr ""
+"Nicht unterstützter Dateityp '%(ext)s'. Bitte laden Sie eine .docx- "
+"oder .pptx-Datei hoch."
+
+#, python-format
+msgid "The file is too large (%(size)s MB). Maximum allowed size is 50 MB."
+msgstr ""
+"Die Datei ist zu groß (%(size)s MB). Die maximale Dateigröße beträgt 50 MB."
+
 msgid "Time stamp"
 msgstr "Zeitstempel"
 
-#: models.py:23
 msgid "Characters sent to DeepL for translation"
 msgstr "An DeepL zur Übersetzung übertragene Zeichen"
 
-#: models.py:27
 msgid "Direction of Translation after auto detection"
 msgstr "Übersetzungsrichtung nach automatischer Erkennung"
 
-#: models.py:30
 msgid "Auto detection of language used?"
 msgstr "Automatische Erkennung der Sprache verwendet?"
 
-#: models.py:34
+msgid "Document translation?"
+msgstr "Dokumentübersetzung?"
+
 msgid "Translation"
 msgstr "Übersetzung"
 
-#: models.py:35
 msgid "Translations"
 msgstr "Übersetzungen"
 
-#: models.py:56
 msgid "DeepL Glossary ID"
 msgstr "DeepL Glossary ID"
 
-#: models.py:57
 msgid "The unique identifier returned by DeepL API"
 msgstr "Unique Identifier der DeepL API"
 
-#: models.py:61
 msgid "Glossary Name"
 msgstr "Name des Glossarys"
 
-#: models.py:62
 msgid "Human-readable name for the glossary"
 msgstr "Menschen-lesbarer Name für Glossary"
 
-#: models.py:66
 msgid "Source Language"
 msgstr "Quellsprache"
 
-#: models.py:67
 msgid "Source language code (e.g., DE, EN)"
 msgstr "Quellsprachen-Code (z.B. DE, EN)"
 
-#: models.py:71
 msgid "Target Language"
 msgstr "Zielsprache"
 
-#: models.py:72
 msgid "Target language code (e.g., EN-GB, DE)"
 msgstr "Zielsprachen-Code (z.B. EN-GB, DE)"
 
-#: models.py:76
 msgid "Upload Date"
 msgstr "Upload-Datum"
 
-#: models.py:77
 msgid "When the glossary was uploaded to DeepL"
 msgstr "Zeitpunkt des Uploads zu DeepL"
 
-#: models.py:81
 msgid "Original Filename"
 msgstr "Ursprünglicher Dateiname"
 
-#: models.py:82
 msgid "The original CSV filename"
 msgstr "Der ursprüngliche CSV-Dateiname"
 
-#: models.py:87
 msgid "Comment"
 msgstr "Kommentar"
 
-#: models.py:88
 msgid "Optional description or notes about this glossary"
 msgstr "Optionale Beschreibung oder Notizen zu diesem Glossar"
 
-#: models.py:92
 msgid "Entry Count"
 msgstr "Anzahl der Einträge"
 
-#: models.py:93
 msgid "Number of entries in the glossary"
 msgstr "Anzahl der Einträge im Glossar"
 
-#: models.py:97
 msgid "Glossary"
 msgstr "Glossar"
 
-#: models.py:98
 msgid "Glossaries"
 msgstr "Glossare"
 
-#: templates/base.html:62
+msgid "Pending"
+msgstr "Ausstehend"
+
+msgid "Processing"
+msgstr "In Bearbeitung"
+
+msgid "Completed"
+msgstr "Abgeschlossen"
+
+msgid "Failed"
+msgstr "Fehlgeschlagen"
+
+msgid "Session key"
+msgstr "Sitzungsschlüssel"
+
+msgid "Django session key of the user who started the job"
+msgstr "Django-Sitzungsschlüssel des Benutzers, der den Auftrag gestartet hat"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Error message"
+msgstr "Fehlermeldung"
+
+msgid "Original filename"
+msgstr "Ursprünglicher Dateiname"
+
+msgid "File type"
+msgstr "Dateityp"
+
+msgid "Extension, e.g. .docx or .pptx"
+msgstr "Dateierweiterung, z. B. .docx oder .pptx"
+
+msgid "File size (bytes)"
+msgstr "Dateigröße (Bytes)"
+
+msgid "Translation direction"
+msgstr "Übersetzungsrichtung"
+
+msgid "Characters translated"
+msgstr "Übersetzte Zeichen"
+
+msgid "API calls"
+msgstr "API-Aufrufe"
+
+msgid "Translation duration (seconds)"
+msgstr "Übersetzungsdauer (Sekunden)"
+
+msgid "Output filename"
+msgstr "Ausgabedateiname"
+
+msgid "Result file path"
+msgstr "Ergebnisdateipfad"
+
+msgid "Downloaded"
+msgstr "Heruntergeladen"
+
+msgid "Download count"
+msgstr "Anzahl Downloads"
+
+msgid "Document Translation Job"
+msgstr "Dokumentübersetzungsauftrag"
+
+msgid "Document Translation Jobs"
+msgstr "Dokumentübersetzungsaufträge"
+
 msgid "usage statistics"
 msgstr "Nutzungsstatistiken"
 
-#: templates/base.html:64
 msgid "daily"
 msgstr "täglich"
 
-#: templates/base.html:67
 msgid "monthly"
 msgstr "monatlich"
 
-#: templates/base.html:70
 msgid "annually"
 msgstr "jährlich"
 
-#: templates/base.html:76
 msgid "logout"
 msgstr "Abmelden"
 
-#: templates/statistics_frontend.html:12
 msgid "Statistics"
 msgstr "Statistiken"
 
-#: templates/statistics_frontend.html:19
 msgid ""
 "Legend: <em>number of requests</em> (<em>number of characters used</em>)"
 msgstr ""
 "Legende: <em>Anzahl der Anfragen</em> (<em>Anzahl der verwendeten Zeichen</"
 "em>)"
 
-#: templates/statistics_frontend.html:28
 msgid "period"
 msgstr "Zeitraum"
 
-#: templates/statistics_frontend.html:31
 msgid "total"
 msgstr "insgesamt"
 
-#: templates/statistics_frontend.html:60
 msgid "back to translation frontend"
 msgstr "zurück zur Übersetzungsmaske"
 
-#: templates/translation_frontend.html:15
 msgid "Enterprise DeepL API access with enhanced privacy."
 msgstr "Enterprise DeepL API-Zugang mit verbessertem Datenschutz."
 
-#: templates/translation_frontend.html:38
+msgid "Text Translation"
+msgstr "Textübersetzung"
+
+msgid "Document Translation"
+msgstr "Dokumentübersetzung"
+
+msgid "action required"
+msgstr "Aktion erforderlich"
+
+msgid "Character limit exceeded!"
+msgstr "Zeichenlimit überschritten!"
+
 msgid "Submit (Ctrl+Enter)"
 msgstr "Absenden (Strg+Enter)"
 
-#: templates/translation_frontend.html:47
 msgid "Copy translation to clipboard"
 msgstr "Übersetzung in die Zwischenablage kopieren"
 
-#: templates/translation_frontend.html:63
+msgid "Translate a Document"
+msgstr "Dokument übersetzen"
+
+msgid ""
+"Upload a Word (.docx) or PowerPoint (.pptx) file. The document will be "
+"translated while preserving its structure and formatting."
+msgstr ""
+"Laden Sie eine Word- (.docx) oder PowerPoint-Datei (.pptx) hoch. Das "
+"Dokument wird übersetzt, wobei Struktur und Formatierung erhalten bleiben."
+
+msgid "Translate Document"
+msgstr "Dokument übersetzen"
+
+msgid "Translating…"
+msgstr "Wird übersetzt…"
+
+msgid "Translating… This may take a moment for large documents."
+msgstr "Wird übersetzt… Bei großen Dokumenten kann dies einen Moment dauern."
+
+msgid "Translation complete"
+msgstr "Übersetzung abgeschlossen"
+
+msgid "File"
+msgstr "Datei"
+
+msgid "Size"
+msgstr "Größe"
+
+msgid "Characters"
+msgstr "Zeichen"
+
+msgid "Duration"
+msgstr "Dauer"
+
+msgid "Download"
+msgstr "Herunterladen"
+
+msgid "Translate another document"
+msgstr "Weiteres Dokument übersetzen"
+
+msgid "Translation failed"
+msgstr "Übersetzung fehlgeschlagen"
+
+msgid "Try again"
+msgstr "Erneut versuchen"
+
+msgid ""
+"Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: 50 "
+"MB."
+msgstr ""
+"Unterstützte Formate: .docx (Word), .pptx (PowerPoint). Maximale Dateigröße: "
+"50 MB."
+
+msgid ""
+"The entire text of each paragraph is translated in one API call. Mixed "
+"character formatting (e.g. individual bold or italic words) within a "
+"paragraph may not be preserved."
+msgstr ""
+"Der gesamte Text eines Absatzes wird in einem API-Aufruf übersetzt. "
+"Gemischte Zeichenformatierungen (z.B. einzelne fett oder kursiv formatierte "
+"Wörter) innerhalb eines Absatzes werden möglicherweise nicht beibehalten."
+
 msgid "About this service"
 msgstr "Über diesen Service"
 
-#: templates/translation_frontend.html:79
 msgid ""
 "Failure when trying to copy to clipboard. Check permissions for clipboard. "
 msgstr ""
 "Fehler beim Kopieren in die Zwischenablage. Bitte Berechtigung für die "
 "Zwischenablage prüfen."
 
-#: views.py:111
+msgid "characters"
+msgstr "Zeichen"
+
+msgid "Uploading…"
+msgstr "Wird hochgeladen…"
+
+msgid "An unexpected error occurred."
+msgstr "Ein unerwarteter Fehler ist aufgetreten."
+
+msgid "Unknown error."
+msgstr "Unbekannter Fehler."
+
+msgid "Lost connection to the server."
+msgstr "Verbindung zum Server verloren."
+
 msgid ""
 "ERROR: Translation service configuration error. Please contact the "
 "administrator."
@@ -216,7 +359,6 @@ msgstr ""
 "FEHLER: Konfigurationsfehler des Übersetzungsdienstes. Bitte kontaktieren "
 "Sie den Administrator."
 
-#: views.py:138 views.py:173
 msgid ""
 "ERROR: The API services at DeepL are currently unavailable. Please try again "
 "later."
@@ -224,11 +366,11 @@ msgstr ""
 "FEHLER: Die API-Dienste bei DeepL sind derzeit nicht verfügbar. Bitte "
 "versuchen Sie es später noch einmal."
 
-#: views.py:145 views.py:180
 msgid "ERROR: An unexpected error occurred. Please try again later."
-msgstr "FEHLER: Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später noch einmal."
+msgstr ""
+"FEHLER: Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es "
+"später noch einmal."
 
-#: views.py:184
 msgid ""
 "ERROR: Language recognition was not successful. Please provide a longer "
 "excerpt or specify the direction explicitly."
@@ -237,45 +379,93 @@ msgstr ""
 "längeren Ausschnitt verwenden oder die Übersetzungsrichtung explizit "
 "auswählen."
 
-#: views.py:212 views.py:345
 #, python-brace-format
 msgid "Current total API character usage: {count} of {limit}."
 msgstr "Derzeitige Ausnutzung des API Zeichenlimits: {count} von {limit}."
 
-#: views.py:220 views.py:353
 msgid ""
 "Current total API character usage: not available due to connection issues."
-msgstr "Derzeitige Ausnutzung des API Zeichenlimits: nicht verfügbar aufgrund von Verbindungsproblemen."
+msgstr ""
+"Derzeitige Ausnutzung des API Zeichenlimits: nicht verfügbar aufgrund von "
+"Verbindungsproblemen."
 
-#: views.py:224 views.py:357
 msgid "Current total API character usage: not available."
 msgstr "Derzeitige Ausnutzung des API Zeichenlimits: nicht verfügbar."
 
-#: views.py:301
 msgid "Report of daily usage:"
 msgstr "Bericht über tägliche Nutzung:"
 
-#: views.py:313
 msgid "Report of monthly usage:"
 msgstr "Bericht über monatliche Nutzung:"
 
-#: views.py:325
 msgid "Report of annual usage:"
 msgstr "Bericht über jährliche Nutzung:"
 
-#: views.py:337
 msgid "Requested report not available."
 msgstr "Der angeforderte Bericht ist nicht verfügbar."
 
-#: forms.py:30
+msgid "Upload file not found on disk."
+msgstr "Hochgeladene Datei nicht auf dem Server gefunden."
+
 #, python-format
-msgid "The text exceeds the maximum allowed length of %(limit)s characters (currently %(length)s characters)."
-msgstr "Der Text überschreitet die maximal zulässige Länge von %(limit)s Zeichen (aktuell %(length)s Zeichen)."
+msgid ""
+"The document contains %(doc_chars)s characters which exceeds the maximum "
+"allowed limit of %(max_chars)s characters (exceeded by %(exceeded_pct)s%%). "
+"Please use a shorter document."
+msgstr ""
+"Das Dokument enthält %(doc_chars)s Zeichen und überschreitet damit das "
+"zulässige Maximum von %(max_chars)s Zeichen (um %(exceeded_pct)s%% "
+"überschritten). Bitte verwenden Sie ein kürzeres Dokument."
 
-#: templates/translation_frontend.html
-msgid "Character limit exceeded!"
-msgstr "Zeichenlimit überschritten!"
+#, python-format
+msgid ""
+"The document translation exceeded the maximum allowed time of %(seconds)s "
+"seconds. Please try a smaller document."
+msgstr ""
+"Die Dokumentübersetzung hat die maximal zulässige Zeit von %(seconds)s "
+"Sekunden überschritten. Bitte versuchen Sie es mit einem kleineren Dokument."
 
-#: templates/translation_frontend.html
-msgid "characters"
-msgstr "Zeichen"
+msgid ""
+"The translation service returned an error. Please try again later or check "
+"that the document is not corrupted."
+msgstr ""
+"Der Übersetzungsdienst hat einen Fehler zurückgegeben. Bitte versuchen Sie "
+"es später erneut oder prüfen Sie, ob das Dokument beschädigt ist."
+
+msgid ""
+"A required library for processing this file type is not installed. Please "
+"contact the administrator."
+msgstr ""
+"Eine erforderliche Bibliothek zur Verarbeitung dieses Dateityps ist nicht "
+"installiert. Bitte kontaktieren Sie den Administrator."
+
+msgid ""
+"An unexpected error occurred while translating the document. Please ensure "
+"the file is a valid .docx or .pptx document and try again."
+msgstr ""
+"Beim Übersetzen des Dokuments ist ein unerwarteter Fehler aufgetreten. Bitte "
+"stellen Sie sicher, dass die Datei ein gültiges .docx- oder .pptx-Dokument "
+"ist, und versuchen Sie es erneut."
+
+msgid "Document translation is not enabled."
+msgstr "Die Dokumentübersetzung ist nicht aktiviert."
+
+msgid "A translation is already in progress. Please wait for it to finish."
+msgstr ""
+"Es läuft bereits eine Übersetzung. Bitte warten Sie, bis diese abgeschlossen "
+"ist."
+
+msgid "Job not found."
+msgstr "Auftrag nicht gefunden."
+
+msgid "Access denied."
+msgstr "Zugriff verweigert."
+
+msgid "File not ready."
+msgstr "Datei noch nicht bereit."
+
+msgid "File no longer available on the server."
+msgstr "Datei ist auf dem Server nicht mehr verfügbar."
+
+#~ msgid "Type"
+#~ msgstr "Typ"

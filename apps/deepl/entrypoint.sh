@@ -20,7 +20,7 @@ echo -e "${GREEN}Starting DeepL Translation Frontend...${NC}"
 echo -e "${GREEN}Fixing volume permissions...${NC}"
 
 # Fix permissions for mounted volumes
-for dir in /secrets /app/data/db /app/logs /app/staticfiles; do
+for dir in /secrets /app/data/db /app/data/media /app/logs /app/staticfiles; do
   if [ -d "$dir" ]; then
     echo -e "${GREEN}Setting ownership for $dir${NC}"
     chown -R appuser:appuser "$dir" 2>/dev/null || true

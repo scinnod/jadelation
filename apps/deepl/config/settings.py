@@ -128,6 +128,19 @@ STATISTICS_YEARS = int(os.getenv("STATISTICS_YEARS", "5"))
 # requests exceeding this length are rejected both client-side and server-side.
 MAX_TRANSLATION_LENGTH = int(os.getenv("MAX_TRANSLATION_LENGTH", "0"))
 
+# Document translation feature toggle.
+# When enabled, an additional tab is shown on the translation page that allows
+# users to upload .docx or .pptx files for in-place translation.  The document
+# structure and formatting are preserved; only text fragments are translated.
+DOCUMENT_TRANSLATION_ENABLED = os.getenv(
+    "DOCUMENT_TRANSLATION_ENABLED", "False"
+).lower() in ("true", "1", "yes")
+
+# Maximum wall-clock time (in seconds) for a single document translation job.
+# When the limit is reached the background worker aborts and marks the job as
+# failed.  Set to 0 to disable the timeout (not recommended in production).
+DOCUMENT_TRANSLATION_TIMEOUT = int(os.getenv("DOCUMENT_TRANSLATION_TIMEOUT", "180"))
+
 # DeepL model type selection.
 # Controls which translation model is used for API requests.
 # Allowed values: "quality_optimized", "prefer_quality_optimized",
@@ -378,6 +391,10 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles/")
 STATICFILES_DIRS = [
     BASE_DIR / "static",  # For additional static files in development
 ]
+
+# Media files (user-uploaded / generated content)
+MEDIA_ROOT = BASE_DIR / "data" / "media"
+MEDIA_URL = "/media/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

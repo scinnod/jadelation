@@ -83,6 +83,13 @@ SSO_LOGOUT_URL=https://auth.example.com/realms/myrealm/protocol/openid-connect/l
 - Real-time character usage display
 - Keyboard shortcut support (Ctrl+Enter to submit)
 
+### Document Translation (Optional)
+- Translate entire Word (.docx) and PowerPoint (.pptx) files
+- In-place text replacement preserving document structure and formatting
+- Automatic file download after translation
+- No files stored permanently — temporary files are cleaned up automatically
+- Enable via `DOCUMENT_TRANSLATION_ENABLED=True` in the environment file
+
 ### Usage Statistics
 - Daily, monthly, and yearly usage reports
 - Request count and character usage tracking
@@ -304,6 +311,7 @@ Key settings:
 - **Branding**: `APP_TITLE_<LANG>`, `ORGANIZATION_NAME_<LANG>`, `FOOTER_TEXT`, `LOGO_FILENAME`
 - **Corporate Identity**: `PRIMARY_COLOR`, `SECONDARY_COLOR` (hex codes without #)
 - **Translation**: `TRANSLATION_DETECTION_LEN`, `MAX_TRANSLATION_LENGTH`, `STATISTICS_DAYS`, `STATISTICS_MONTHS`, `STATISTICS_YEARS`
+- **Document Translation**: `DOCUMENT_TRANSLATION_ENABLED` (set to `True` to enable .docx/.pptx file translation)
 - **Localization**: `TIME_ZONE`, `LANGUAGE_CODE`
 
 Note: `SECRET_KEY` is auto-generated on first run - do not configure manually.
@@ -407,6 +415,7 @@ python manage.py migrate
 | Document | Description |
 |----------|-------------|
 | [docs/DOCKER.md](docs/DOCKER.md) | Docker deployment guide |
+| [docs/DOCUMENT_TRANSLATION.md](docs/DOCUMENT_TRANSLATION.md) | Document translation (docx/pptx) |
 | [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) | Glossary management |
 | [docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) | Design principles |
 | [docs/TESTING.md](docs/TESTING.md) | Testing guide |

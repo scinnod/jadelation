@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
 
+import os
+
 from django import forms
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -32,3 +34,49 @@ class TranslationForm(forms.Form):
                 params={"limit": max_len, "length": len(text)},
             )
         return text
+
+
+# Allowed file extensions for document translation
+ALLOWED_DOC_EXTENSIONS = (".docx", ".pptx")
+
+
+class DocumentTranslationForm(forms.Form):
+    """Form for uploading .docx / .pptx files for in-place translation."""
+
+    DIRECTION_CHOICES = [
+        ("", _("— Please select —")),
+        ("DE->EN-GB|", _("German -> English")),
+        ("EN-GB->DE|more", _("English -> German (formal)")),
+        ("EN-GB->DE|less", _("English -> German (less formal)")),
+    ]
+
+    directionChoice = forms.ChoiceField(
+        required=True,
+        choices=DIRECTION_CHOICES,
+        label=_("Direction of translation"),
+    )
+
+    document = forms.FileField(
+        required=True,
+        label=_("Document (.docx or .pptx)"),
+        help_text=_("Upload a Word or PowerPoint file. The document structure and formatting will be preserved."),
+    )
+
+    def clean_document(self):
+        uploaded = self.cleaned_data["document"]
+        ext = os.path.splitext(uploaded.name)[1].lower()
+        if ext not in ALLOWED_DOC_EXTENSIONS:
+            raise forms.ValidationError(
+                _("Unsupported file type '%(ext)s'. Please upload a .docx or .pptx file."),
+                code="invalid_extension",
+                params={"ext": ext},
+            )
+        # Limit file size to 50 MB
+        max_size = 50 * 1024 * 1024
+        if uploaded.size > max_size:
+            raise forms.ValidationError(
+                _("The file is too large (%(size)s MB). Maximum allowed size is 50 MB."),
+                code="file_too_large",
+                params={"size": round(uploaded.size / (1024 * 1024), 1)},
+            )
+        return uploaded

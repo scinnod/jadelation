@@ -16,15 +16,17 @@ Tests cover:
 import os
 import tempfile
 from datetime import timedelta
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client, RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .forms import TranslationForm
-from .models import Translation, Glossary
+from .forms import TranslationForm, DocumentTranslationForm
+from .models import Translation, Glossary, DocumentTranslationJob
 
 
 # ============================================================================
@@ -593,6 +595,7 @@ class TranslationViewPostTest(TestCase):
         self.assertEqual(record.direction, "DE->EN-GB|")
         self.assertEqual(record.characters, len("Test text"))
         self.assertFalse(record.auto_detection)
+        self.assertFalse(record.is_document_translation)
 
     @patch("deeplFrontend.views.deepl.Translator")
     def test_post_auto_detection_sets_flag(self, mock_translator_cls):
@@ -1364,3 +1367,1713 @@ class GlossaryIntegrationTest(TestCase):
         self.assertIsNotNone(cache.get("DE->EN"))
         self.assertIsNone(cache.get("DE->EN-GB"))
         self.assertEqual(cache.get("DE->EN"), mock_deepl_glossary)
+
+
+# ============================================================================
+# Document Translation Form Tests
+# ============================================================================
+
+def _make_docx_bytes():
+    """Create a minimal valid .docx file in memory and return its bytes."""
+    from docx import Document
+    buf = BytesIO()
+    doc = Document()
+    doc.add_paragraph("Hallo Welt")
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _make_pptx_bytes():
+    """Create a minimal valid .pptx file in memory and return its bytes."""
+    from pptx import Presentation
+    from pptx.util import Inches
+    buf = BytesIO()
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Titel"
+    slide.placeholders[1].text = "Hallo Welt"
+    prs.save(buf)
+    return buf.getvalue()
+
+
+class DocumentTranslationFormTest(TestCase):
+    """Test DocumentTranslationForm validation and field behaviour."""
+
+    def test_no_auto_detection_choice(self):
+        """Document form must NOT offer 'auto' as a direction choice."""
+        form = DocumentTranslationForm()
+        choice_values = [v for v, _ in form.fields["directionChoice"].choices]
+        self.assertNotIn("auto", choice_values)
+
+    def test_direction_choices_count(self):
+        """3 direction choices plus 1 blank placeholder."""
+        form = DocumentTranslationForm()
+        self.assertEqual(len(form.fields["directionChoice"].choices), 4)
+        # First choice is the blank placeholder
+        self.assertEqual(form.fields["directionChoice"].choices[0][0], "")
+
+    def test_valid_docx_upload(self):
+        """Valid .docx file and direction should pass validation."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes(),
+                                  content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={"document": docx},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_valid_pptx_upload(self):
+        """Valid .pptx file and direction should pass validation."""
+        pptx = SimpleUploadedFile("slides.pptx", _make_pptx_bytes(),
+                                  content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        form = DocumentTranslationForm(
+            data={"directionChoice": "EN-GB->DE|more"},
+            files={"document": pptx},
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_invalid_extension_rejected(self):
+        """Uploading a .txt file should be rejected."""
+        txt = SimpleUploadedFile("readme.txt", b"Hello world", content_type="text/plain")
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={"document": txt},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("document", form.errors)
+
+    def test_pdf_rejected(self):
+        """Uploading a .pdf file should be rejected."""
+        pdf = SimpleUploadedFile("report.pdf", b"%PDF-1.4", content_type="application/pdf")
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={"document": pdf},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("document", form.errors)
+
+    def test_old_doc_format_rejected(self):
+        """Uploading a .doc (legacy) file should be rejected."""
+        doc = SimpleUploadedFile("old.doc", b"\xd0\xcf\x11", content_type="application/msword")
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={"document": doc},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("document", form.errors)
+
+    def test_missing_file_rejected(self):
+        """Submitting without a file should be rejected."""
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("document", form.errors)
+
+    def test_missing_direction_rejected(self):
+        """Submitting without a direction choice should be rejected."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        form = DocumentTranslationForm(
+            data={},
+            files={"document": docx},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("directionChoice", form.errors)
+
+    def test_invalid_direction_rejected(self):
+        """Submitting with an invalid direction choice should be rejected."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        form = DocumentTranslationForm(
+            data={"directionChoice": "auto"},
+            files={"document": docx},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("directionChoice", form.errors)
+
+    def test_file_too_large_rejected(self):
+        """File exceeding 50 MB should be rejected."""
+        # Create a file object that reports a large size without allocating memory
+        big = SimpleUploadedFile("huge.docx", b"x", content_type="application/octet-stream")
+        big.size = 51 * 1024 * 1024  # 51 MB
+        form = DocumentTranslationForm(
+            data={"directionChoice": "DE->EN-GB|"},
+            files={"document": big},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("document", form.errors)
+
+    def test_direction_required(self):
+        """directionChoice field is required."""
+        form = DocumentTranslationForm()
+        self.assertTrue(form.fields["directionChoice"].required)
+
+    def test_document_required(self):
+        """document field is required."""
+        form = DocumentTranslationForm()
+        self.assertTrue(form.fields["document"].required)
+
+
+# ============================================================================
+# Document Translation URL Tests
+# ============================================================================
+
+class DocumentTranslationURLTest(TestCase):
+    """Test URL routing for document translation."""
+
+    def test_document_translation_url_resolves(self):
+        """document-translation URL should resolve."""
+        url = reverse("document-translation")
+        self.assertIn("translation/document", url)
+
+
+# ============================================================================
+# Document Translation View Tests
+# ============================================================================
+
+class DocumentTranslationViewGetTest(TestCase):
+    """Test GET requests and feature-flag behaviour for document translation."""
+
+    def setUp(self):
+        self.client = Client()
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_tabs_shown_when_enabled(self):
+        """Translation page should show tabs when feature is enabled."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "translationTabs")
+        self.assertContains(response, "document-pane")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_tabs_hidden_when_disabled(self):
+        """Translation page should NOT show tabs when feature is disabled."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "translationTabs")
+        self.assertNotContains(response, "document-pane")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_doc_form_in_context(self):
+        """doc_form should be present in context when enabled."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertIn("doc_form", response.context)
+        self.assertIsInstance(response.context["doc_form"], DocumentTranslationForm)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_get_document_url_returns_405_when_disabled(self):
+        """GET to document URL should return 405 (POST only)."""
+        response = self.client.get(reverse("document-translation"))
+        self.assertEqual(response.status_code, 405)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_post_document_url_returns_404_when_disabled(self):
+        """POST to document URL should return 404 when feature is disabled."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        response = self.client.post(reverse("document-translation"), {
+            "directionChoice": "DE->EN-GB|",
+            "document": docx,
+        })
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_get_document_url_returns_405(self):
+        """GET to document translation endpoint should return 405 (POST only)."""
+        response = self.client.get(reverse("document-translation"))
+        self.assertEqual(response.status_code, 405)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_active_job_shown_on_page_load(self):
+        """If a PENDING job exists for the session, active_doc_job_json is in context."""
+        # Create a session first
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        job = DocumentTranslationJob.objects.create(
+            session_key=session.session_key,
+            original_filename="test.docx",
+            file_type=".docx",
+            file_size=1024,
+            direction="DE->EN-GB|",
+            output_filename="test_en.docx",
+            status=DocumentTranslationJob.Status.PENDING,
+        )
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("active_doc_job_json", response.context)
+        import json
+        data = json.loads(response.context["active_doc_job_json"])
+        self.assertEqual(data["id"], str(job.id))
+        self.assertEqual(data["status"], "pending")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_completed_not_downloaded_shown_on_reload(self):
+        """A completed job that has NOT been downloaded should appear on reload."""
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        job = DocumentTranslationJob.objects.create(
+            session_key=session.session_key,
+            original_filename="test.docx",
+            file_type=".docx",
+            file_size=1024,
+            direction="DE->EN-GB|",
+            output_filename="test_en.docx",
+            status=DocumentTranslationJob.Status.COMPLETED,
+            result_path="doc_translations/fake/test.docx",
+            downloaded=False,
+            characters=500,
+            duration_seconds=2.5,
+        )
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("active_doc_job_json", response.context)
+        import json
+        data = json.loads(response.context["active_doc_job_json"])
+        self.assertEqual(data["id"], str(job.id))
+        self.assertEqual(data["status"], "completed")
+        self.assertEqual(data["characters"], 500)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_no_active_job_when_completed_and_cleaned(self):
+        """A completed job with empty result_path should not appear as active."""
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        DocumentTranslationJob.objects.create(
+            session_key=session.session_key,
+            original_filename="test.docx",
+            file_type=".docx",
+            file_size=1024,
+            direction="DE->EN-GB|",
+            output_filename="test_en.docx",
+            status=DocumentTranslationJob.Status.COMPLETED,
+            result_path="",  # cleaned up
+        )
+        response = self.client.get(reverse("translation-form"))
+        self.assertNotIn("active_doc_job_json", response.context)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_no_active_job_after_download(self):
+        """A completed+downloaded job should not appear on page reload."""
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        DocumentTranslationJob.objects.create(
+            session_key=session.session_key,
+            original_filename="test.docx",
+            file_type=".docx",
+            file_size=1024,
+            direction="DE->EN-GB|",
+            output_filename="test_en.docx",
+            status=DocumentTranslationJob.Status.COMPLETED,
+            result_path="doc_translations/fake/test.docx",
+            downloaded=True,
+            download_count=1,
+        )
+        response = self.client.get(reverse("translation-form"))
+        self.assertNotIn("active_doc_job_json", response.context)
+
+
+class DocumentTranslationViewPostTest(TestCase):
+    """Test POST requests to the document translation view with mocked DeepL API."""
+
+    def setUp(self):
+        self.client = Client()
+        from .views import _GlossaryCache
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")
+
+    def _patch_empty_glossary(self):
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_docx_translation_returns_job_id(self, mock_translator_cls):
+        """Uploading a valid .docx should return JSON with a job_id."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx_bytes = _make_docx_bytes()
+        docx = SimpleUploadedFile("bericht.docx", docx_bytes,
+                                  content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("job_id", data)
+        job = DocumentTranslationJob.objects.get(pk=data["job_id"])
+        self.assertEqual(job.original_filename, "bericht.docx")
+        self.assertEqual(job.output_filename, "bericht_en.docx")
+        self.assertEqual(job.file_type, ".docx")
+        mock_thread.return_value.start.assert_called_once()
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_pptx_translation_returns_job_id(self, mock_translator_cls):
+        """Uploading a valid .pptx should return JSON with a job_id."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        pptx_bytes = _make_pptx_bytes()
+        pptx = SimpleUploadedFile("folien.pptx", pptx_bytes,
+                                  content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": pptx,
+            })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("job_id", data)
+        job = DocumentTranslationJob.objects.get(pk=data["job_id"])
+        self.assertEqual(job.original_filename, "folien.pptx")
+        self.assertEqual(job.output_filename, "folien_en.pptx")
+        self.assertEqual(job.file_type, ".pptx")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_output_filename_has_target_lang_suffix(self, mock_translator_cls):
+        """Output file should be named <original>_<lang>.<ext>."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hallo"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx = SimpleUploadedFile("report.docx", _make_docx_bytes())
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "EN-GB->DE|more",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        job = DocumentTranslationJob.objects.get(pk=data["job_id"])
+        self.assertEqual(job.output_filename, "report_de.docx")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_translation_record_created(self, mock_translator_cls):
+        """Background translation should create a Translation record."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        self.assertEqual(Translation.objects.count(), 0)
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+
+        # Use a synchronous thread mock that runs the target immediately
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(Translation.objects.count(), 1)
+        record = Translation.objects.first()
+        self.assertEqual(record.direction, "DE->EN-GB|")
+        self.assertFalse(record.auto_detection)
+        self.assertGreater(record.characters, 0)
+        self.assertTrue(record.is_document_translation)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_api_error_sets_job_failed(self, mock_translator_cls):
+        """DeepL API error should mark the job as failed."""
+        import deepl as deepl_lib
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_translator.translate_text.side_effect = deepl_lib.DeepLException("quota exceeded")
+
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+
+        # Run the background thread synchronously so we can inspect the result
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        job = DocumentTranslationJob.objects.get(pk=data["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        self.assertTrue(job.error_message)
+        # Should NOT create a translation record on error
+        self.assertEqual(Translation.objects.count(), 0)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_invalid_form_returns_json_errors(self):
+        """Submitting an invalid form should return JSON with errors."""
+        txt = SimpleUploadedFile("notes.txt", b"Hello", content_type="text/plain")
+        response = self.client.post(reverse("document-translation"), {
+            "directionChoice": "DE->EN-GB|",
+            "document": txt,
+        })
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("errors", data)
+        self.assertIn("document", data["errors"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_missing_file_returns_json_errors(self):
+        """Submitting without a file should return JSON with errors."""
+        response = self.client.post(reverse("document-translation"), {
+            "directionChoice": "DE->EN-GB|",
+        })
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("errors", data)
+        self.assertIn("document", data["errors"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_active_job_blocks_new_upload(self, mock_translator_cls):
+        """A second upload should be rejected with 409 while a job is pending."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        docx = SimpleUploadedFile("first.docx", _make_docx_bytes())
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            resp1 = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(resp1.status_code, 200)
+
+        # Second upload while first job is still PENDING
+        docx2 = SimpleUploadedFile("second.docx", _make_docx_bytes())
+        with self._patch_empty_glossary():
+            resp2 = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx2,
+            })
+        self.assertEqual(resp2.status_code, 409)
+        data = resp2.json()
+        self.assertIn("error", data)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_completed_job_allows_new_upload(self, mock_translator_cls):
+        """After a job completes, a new upload should be accepted."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        docx = SimpleUploadedFile("first.docx", _make_docx_bytes())
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            resp1 = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(resp1.status_code, 200)
+        # Mark first job as completed
+        job = DocumentTranslationJob.objects.get(pk=resp1.json()["job_id"])
+        job.status = DocumentTranslationJob.Status.COMPLETED
+        job.save(update_fields=["status"])
+
+        # Second upload should succeed now
+        docx2 = SimpleUploadedFile("second.docx", _make_docx_bytes())
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            resp2 = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx2,
+            })
+        self.assertEqual(resp2.status_code, 200)
+
+
+# ============================================================================
+# Document Translation Helper Tests
+# ============================================================================
+
+class TranslateDocxHelperTest(TestCase):
+    """Test _translate_docx helper with real docx files."""
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_translates_paragraph_text(self, mock_translator_cls):
+        """Paragraph text in the docx should be replaced with translations."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("Hallo Welt")
+            doc.save(path)
+
+            char_count, api_calls = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+            self.assertGreater(char_count, 0)
+            self.assertGreater(api_calls, 0)
+            # Verify the file was modified
+            result_doc = DocxDocument(path)
+            self.assertEqual(result_doc.paragraphs[0].text, "Hello World")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_translates_table_cells(self, mock_translator_cls):
+        """Table cell text should be translated."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "table.docx")
+            doc = DocxDocument()
+            table = doc.add_table(rows=1, cols=2)
+            table.rows[0].cells[0].text = "Zelle A"
+            table.rows[0].cells[1].text = "Zelle B"
+            doc.save(path)
+
+            _translate_docx(path, mock_translator, "DE", "EN-GB", None, None, None)
+
+            result_doc = DocxDocument(path)
+            self.assertEqual(result_doc.tables[0].rows[0].cells[0].text, "Translated")
+            self.assertEqual(result_doc.tables[0].rows[0].cells[1].text, "Translated")
+
+    def test_empty_paragraphs_skipped(self):
+        """Empty paragraphs should not trigger API calls."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "empty.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("")  # empty
+            doc.add_paragraph("   ")  # whitespace only
+            doc.save(path)
+
+            char_count, api_calls = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+            self.assertEqual(char_count, 0)
+            self.assertEqual(api_calls, 0)
+            mock_translator.translate_text.assert_not_called()
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_multi_run_paragraph_merged(self, mock_translator_cls):
+        """Multiple runs in a paragraph should be merged and translated as one."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Hello World from DeepL"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "multi_run.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            # Simulate Word splitting text into multiple runs (editing history)
+            run1 = para.add_run("Hallo ")
+            run2 = para.add_run("Welt ")
+            run3 = para.add_run("von DeepL")
+            doc.save(path)
+
+            _translate_docx(path, mock_translator, "DE", "EN-GB", None, None, None)
+
+            # API should be called exactly once with the full paragraph text
+            mock_translator.translate_text.assert_called_once()
+            call_args = mock_translator.translate_text.call_args
+            self.assertEqual(call_args[0][0], "Hallo Welt von DeepL")
+
+            # The translated text should be in the first run, others empty
+            result_doc = DocxDocument(path)
+            result_runs = result_doc.paragraphs[0].runs
+            self.assertEqual(result_runs[0].text, "Hello World from DeepL")
+            self.assertEqual(result_runs[1].text, "")
+            self.assertEqual(result_runs[2].text, "")
+            # Full paragraph text should still be correct
+            self.assertEqual(result_doc.paragraphs[0].text, "Hello World from DeepL")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_multi_run_spaces_preserved(self, mock_translator_cls):
+        """Spaces at run boundaries should not be lost."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Hello beautiful World"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "spaces.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            # Space belongs to first run (common pattern when formatting changes)
+            para.add_run("Hallo ")
+            run_bold = para.add_run("schöne ")
+            run_bold.bold = True
+            para.add_run("Welt")
+            doc.save(path)
+
+            _translate_docx(path, mock_translator, "DE", "EN-GB", None, None, None)
+
+            result_doc = DocxDocument(path)
+            # Full text must be intact, no missing spaces
+            self.assertEqual(result_doc.paragraphs[0].text, "Hello beautiful World")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_char_count_reflects_full_paragraph(self, mock_translator_cls):
+        """Character count should include all run texts in the paragraph."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "count.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            para.add_run("ABC")   # 3 chars
+            para.add_run(" DE")   # 3 chars
+            doc.save(path)
+
+            char_count, api_calls = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+            self.assertEqual(char_count, 6)
+            self.assertEqual(api_calls, 1)
+
+
+class TranslatePptxHelperTest(TestCase):
+    """Test _translate_pptx helper with real pptx files."""
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_translates_slide_text(self, mock_translator_cls):
+        """Slide text frames should be translated."""
+        from pptx import Presentation
+        from pptx.util import Inches
+        from .views import _translate_pptx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.pptx")
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            slide.shapes.title.text = "Titel"
+            slide.placeholders[1].text = "Hallo Welt"
+            prs.save(path)
+
+            char_count, api_calls = _translate_pptx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+            self.assertGreater(char_count, 0)
+            self.assertGreater(api_calls, 0)
+            mock_translator.translate_text.assert_called()
+
+    def test_empty_slides_skipped(self):
+        """Slides with no text should not trigger API calls."""
+        from pptx import Presentation
+        from .views import _translate_pptx
+
+        mock_translator = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "blank.pptx")
+            prs = Presentation()
+            prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
+            prs.save(path)
+
+            char_count, api_calls = _translate_pptx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+            self.assertEqual(char_count, 0)
+            self.assertEqual(api_calls, 0)
+            mock_translator.translate_text.assert_not_called()
+
+
+class TranslateTextFragmentTest(TestCase):
+    """Test the _translate_text_fragment helper."""
+
+    def test_empty_string_returned_as_is(self):
+        """Empty strings should be returned without calling the API."""
+        from .views import _translate_text_fragment
+        mock_translator = MagicMock()
+        result = _translate_text_fragment(mock_translator, "", "DE", "EN-GB", None, None, None)
+        self.assertEqual(result, "")
+        mock_translator.translate_text.assert_not_called()
+
+    def test_whitespace_only_returned_as_is(self):
+        """Whitespace-only strings should be returned without calling the API."""
+        from .views import _translate_text_fragment
+        mock_translator = MagicMock()
+        result = _translate_text_fragment(mock_translator, "   ", "DE", "EN-GB", None, None, None)
+        self.assertEqual(result, "   ")
+        mock_translator.translate_text.assert_not_called()
+
+    def test_none_returned_as_is(self):
+        """None should be returned without calling the API."""
+        from .views import _translate_text_fragment
+        mock_translator = MagicMock()
+        result = _translate_text_fragment(mock_translator, None, "DE", "EN-GB", None, None, None)
+        self.assertIsNone(result)
+        mock_translator.translate_text.assert_not_called()
+
+    def test_text_translated_via_api(self):
+        """Non-empty text should be translated via the API."""
+        from .views import _translate_text_fragment
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Hello"
+        mock_translator.translate_text.return_value = mock_result
+
+        result = _translate_text_fragment(mock_translator, "Hallo", "DE", "EN-GB", None, None, None)
+        self.assertEqual(result, "Hello")
+        mock_translator.translate_text.assert_called_once()
+
+
+class LangSuffixTest(TestCase):
+    """Test the _lang_suffix helper."""
+
+    def test_en_gb(self):
+        from .views import _lang_suffix
+        self.assertEqual(_lang_suffix("EN-GB"), "en")
+
+    def test_de(self):
+        from .views import _lang_suffix
+        self.assertEqual(_lang_suffix("DE"), "de")
+
+    def test_fr(self):
+        from .views import _lang_suffix
+        self.assertEqual(_lang_suffix("FR"), "fr")
+
+
+# ============================================================================
+# Document Translation Settings Test
+# ============================================================================
+
+class DocumentTranslationSettingsTest(TestCase):
+    """Test DOCUMENT_TRANSLATION_ENABLED setting and context processor."""
+
+    def test_setting_exists(self):
+        """DOCUMENT_TRANSLATION_ENABLED should exist in settings."""
+        self.assertTrue(hasattr(settings, "DOCUMENT_TRANSLATION_ENABLED"))
+
+    def test_setting_is_boolean(self):
+        """DOCUMENT_TRANSLATION_ENABLED should be a boolean."""
+        self.assertIsInstance(settings.DOCUMENT_TRANSLATION_ENABLED, bool)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_context_processor_exposes_setting_true(self):
+        """Context processor should expose DOCUMENT_TRANSLATION_ENABLED=True."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertTrue(response.context["DOCUMENT_TRANSLATION_ENABLED"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_context_processor_exposes_setting_false(self):
+        """Context processor should expose DOCUMENT_TRANSLATION_ENABLED=False."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertFalse(response.context["DOCUMENT_TRANSLATION_ENABLED"])
+
+
+# ============================================================================
+# DocumentTranslationJob Model Tests
+# ============================================================================
+
+class DocumentTranslationJobModelTest(TestCase):
+    """Test DocumentTranslationJob model."""
+
+    def _create_job(self, **kwargs):
+        defaults = {
+            "session_key": "test-session-key",
+            "original_filename": "test.docx",
+            "file_type": ".docx",
+            "file_size": 1024,
+            "direction": "DE->EN-GB|",
+            "output_filename": "test_en.docx",
+        }
+        defaults.update(kwargs)
+        return DocumentTranslationJob.objects.create(**defaults)
+
+    def test_default_status_pending(self):
+        """New jobs should have status PENDING."""
+        job = self._create_job()
+        self.assertEqual(job.status, DocumentTranslationJob.Status.PENDING)
+
+    def test_str_representation(self):
+        """String representation includes filename and status."""
+        job = self._create_job()
+        self.assertIn("test.docx", str(job))
+        self.assertIn("pending", str(job))
+
+    def test_uuid_primary_key(self):
+        """Primary key should be a valid UUID."""
+        import uuid as uuid_mod
+        job = self._create_job()
+        self.assertIsInstance(job.pk, uuid_mod.UUID)
+
+    def test_downloaded_default_false(self):
+        """downloaded should default to False."""
+        job = self._create_job()
+        self.assertFalse(job.downloaded)
+
+
+# ============================================================================
+# Document Job Status Endpoint Tests
+# ============================================================================
+
+class DocumentJobStatusEndpointTest(TestCase):
+    """Test the /translation/document/<id>/status/ polling endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+        # Force a session so we have a session_key
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        self.session_key = session.session_key
+
+    def _create_job(self, **kwargs):
+        defaults = {
+            "session_key": self.session_key,
+            "original_filename": "test.docx",
+            "file_type": ".docx",
+            "file_size": 2048,
+            "direction": "DE->EN-GB|",
+            "output_filename": "test_en.docx",
+        }
+        defaults.update(kwargs)
+        return DocumentTranslationJob.objects.create(**defaults)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_pending_status(self):
+        """Pending job should return status 'pending'."""
+        job = self._create_job()
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "pending")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_completed_status_includes_metadata(self):
+        """Completed job should include characters, api_calls, duration."""
+        job = self._create_job(
+            status=DocumentTranslationJob.Status.COMPLETED,
+            characters=500,
+            api_calls=10,
+            duration_seconds=2.5,
+        )
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        data = response.json()
+        self.assertEqual(data["status"], "completed")
+        self.assertEqual(data["characters"], 500)
+        self.assertEqual(data["api_calls"], 10)
+        self.assertEqual(data["duration_seconds"], 2.5)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_failed_status_includes_error(self):
+        """Failed job should include error_message."""
+        job = self._create_job(
+            status=DocumentTranslationJob.Status.FAILED,
+            error_message="API quota exceeded",
+        )
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        data = response.json()
+        self.assertEqual(data["status"], "failed")
+        self.assertEqual(data["error_message"], "API quota exceeded")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_wrong_session_returns_403(self):
+        """Polling a job from another session should return 403."""
+        job = self._create_job(session_key="other-session-key")
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_nonexistent_job_returns_404(self):
+        """Polling a non-existent job should return 404."""
+        import uuid as uuid_mod
+        fake_id = uuid_mod.uuid4()
+        response = self.client.get(reverse("document-job-status", args=[fake_id]))
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_disabled_returns_404(self):
+        """Status endpoint should return 404 when feature is disabled."""
+        job = self._create_job()
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        self.assertEqual(response.status_code, 404)
+
+
+# ============================================================================
+# Document Download Endpoint Tests
+# ============================================================================
+
+class DocumentDownloadEndpointTest(TestCase):
+    """Test the /translation/document/<id>/download/ endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.get(reverse("translation-form"))
+        session = self.client.session
+        session.save()
+        self.session_key = session.session_key
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _create_completed_job(self, with_file=True, **kwargs):
+        defaults = {
+            "session_key": self.session_key,
+            "original_filename": "report.docx",
+            "file_type": ".docx",
+            "file_size": 4096,
+            "direction": "DE->EN-GB|",
+            "output_filename": "report_en.docx",
+            "status": DocumentTranslationJob.Status.COMPLETED,
+            "characters": 100,
+        }
+        defaults.update(kwargs)
+        job = DocumentTranslationJob.objects.create(**defaults)
+
+        if with_file:
+            job_dir = os.path.join(self.tmp_dir, "doc_translations", str(job.id))
+            os.makedirs(job_dir, exist_ok=True)
+            filepath = os.path.join(job_dir, "report.docx")
+            with open(filepath, "wb") as f:
+                f.write(b"PK\x03\x04fake-docx-content")
+            job.result_path = os.path.join("doc_translations", str(job.id), "report.docx")
+            job.save(update_fields=["result_path"])
+
+        return job
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_download_serves_file(self):
+        """Download should serve the file with correct Content-Disposition."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job()
+            response = self.client.get(reverse("document-download", args=[job.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("report_en.docx", response["Content-Disposition"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_download_marks_as_downloaded(self):
+        """Download should set downloaded=True and increment download_count."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job()
+            self.client.get(reverse("document-download", args=[job.id]))
+        job.refresh_from_db()
+        self.assertTrue(job.downloaded)
+        self.assertEqual(job.download_count, 1)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_download_count_increments(self):
+        """Each download should increment download_count."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job()
+            self.client.get(reverse("document-download", args=[job.id]))
+            self.client.get(reverse("document-download", args=[job.id]))
+        job.refresh_from_db()
+        self.assertEqual(job.download_count, 2)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_download_keeps_file_for_redownload(self):
+        """File should remain on disk after download (10-min cleanup handles removal)."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job()
+            self.client.get(reverse("document-download", args=[job.id]))
+            full_path = os.path.join(self.tmp_dir, job.result_path)
+            self.assertTrue(os.path.isfile(full_path))
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_wrong_session_returns_403(self):
+        """Downloading a job from another session should return 403."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job(session_key="other-session")
+            response = self.client.get(reverse("document-download", args=[job.id]))
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_pending_job_returns_409(self):
+        """Downloading a non-completed job should return 409."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job(
+                status=DocumentTranslationJob.Status.PENDING,
+            )
+            response = self.client.get(reverse("document-download", args=[job.id]))
+        self.assertEqual(response.status_code, 409)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_missing_result_path_returns_410(self):
+        """Downloading a job with empty result_path should return 410."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job(with_file=False)
+            response = self.client.get(reverse("document-download", args=[job.id]))
+        self.assertEqual(response.status_code, 410)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_disabled_returns_404(self):
+        """Download endpoint should return 404 when feature is disabled."""
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_completed_job()
+            response = self.client.get(reverse("document-download", args=[job.id]))
+        self.assertEqual(response.status_code, 404)
+
+
+# ============================================================================
+# Stale Document Job Cleanup Tests
+# ============================================================================
+
+class StaleDocumentJobCleanupTest(TestCase):
+    """Test _cleanup_stale_document_jobs helper."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _create_job_with_file(self, created_minutes_ago=15, **kwargs):
+        defaults = {
+            "session_key": "cleanup-test",
+            "original_filename": "old.docx",
+            "file_type": ".docx",
+            "file_size": 512,
+            "direction": "DE->EN-GB|",
+            "output_filename": "old_en.docx",
+            "status": DocumentTranslationJob.Status.COMPLETED,
+        }
+        defaults.update(kwargs)
+        job = DocumentTranslationJob.objects.create(**defaults)
+
+        # Backdate created_at
+        DocumentTranslationJob.objects.filter(pk=job.pk).update(
+            created_at=timezone.now() - timedelta(minutes=created_minutes_ago),
+        )
+        job.refresh_from_db()
+
+        # Create a file on disk
+        job_dir = os.path.join(self.tmp_dir, "doc_translations", str(job.id))
+        os.makedirs(job_dir, exist_ok=True)
+        filepath = os.path.join(job_dir, "old.docx")
+        with open(filepath, "wb") as f:
+            f.write(b"fake content")
+        job.result_path = os.path.join("doc_translations", str(job.id), "old.docx")
+        job.save(update_fields=["result_path"])
+        return job
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_stale_jobs_cleaned(self):
+        """Jobs older than 10 minutes should have their files removed."""
+        from .views import _cleanup_stale_document_jobs
+
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_job_with_file(created_minutes_ago=15)
+            filepath = os.path.join(self.tmp_dir, job.result_path)
+            self.assertTrue(os.path.isfile(filepath))
+
+            _cleanup_stale_document_jobs()
+
+            self.assertFalse(os.path.isfile(filepath))
+            job.refresh_from_db()
+            self.assertEqual(job.result_path, "")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_recent_jobs_kept(self):
+        """Jobs younger than 10 minutes should not be cleaned up."""
+        from .views import _cleanup_stale_document_jobs
+
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            job = self._create_job_with_file(created_minutes_ago=5)
+            filepath = os.path.join(self.tmp_dir, job.result_path)
+
+            _cleanup_stale_document_jobs()
+
+            self.assertTrue(os.path.isfile(filepath))
+            job.refresh_from_db()
+            self.assertNotEqual(job.result_path, "")
+
+
+# ============================================================================
+# Document Translation Timeout Tests
+# ============================================================================
+
+class DocumentTranslationTimeoutTest(TestCase):
+    """Test the DOCUMENT_TRANSLATION_TIMEOUT wall-time limit."""
+
+    def setUp(self):
+        self.client = Client()
+        from .views import _GlossaryCache
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")
+
+    def _patch_empty_glossary(self):
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, DOCUMENT_TRANSLATION_TIMEOUT=1)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_timeout_marks_job_failed(self, mock_translator_cls):
+        """A translation exceeding the wall-time limit should fail."""
+        import time as time_mod
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        # Simulate a slow API call that takes longer than the 1-second limit
+        def slow_translate(*args, **kwargs):
+            time_mod.sleep(0.3)
+            result = MagicMock()
+            result.text = "Translated"
+            return result
+        mock_translator.translate_text.side_effect = slow_translate
+
+        # Build a docx with enough paragraphs to force multiple API calls
+        from docx import Document as DocxDocument
+        buf = BytesIO()
+        doc = DocxDocument()
+        for i in range(10):
+            doc.add_paragraph(f"Paragraph {i} with some text to translate for testing.")
+        doc.save(buf)
+        docx_bytes = buf.getvalue()
+
+        docx = SimpleUploadedFile("slow.docx", docx_bytes)
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        self.assertIn("1", job.error_message)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, DOCUMENT_TRANSLATION_TIMEOUT=0)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_timeout_disabled_allows_completion(self, mock_translator_cls):
+        """With timeout=0, translation should complete normally."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx = SimpleUploadedFile("fast.docx", _make_docx_bytes())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.COMPLETED)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_default_timeout_setting(self):
+        """DOCUMENT_TRANSLATION_TIMEOUT should default to 180."""
+        self.assertEqual(settings.DOCUMENT_TRANSLATION_TIMEOUT, 180)
+
+
+# ============================================================================
+# Document Character Limit Tests
+# ============================================================================
+
+class DocumentCharacterLimitTest(TestCase):
+    """Test pre-flight character count check for document translations."""
+
+    def setUp(self):
+        self.client = Client()
+        from .views import _GlossaryCache
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")
+
+    def _patch_empty_glossary(self):
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, MAX_TRANSLATION_LENGTH=9)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_exceeding_char_limit_fails_job(self, mock_translator_cls):
+        """A document exceeding MAX_TRANSLATION_LENGTH should fail immediately."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        docx = SimpleUploadedFile("big.docx", _make_docx_bytes())  # "Hallo Welt" = 10 chars
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        self.assertIn("9", job.error_message)
+        # Should NOT have called the translation API
+        mock_translator.translate_text.assert_not_called()
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, MAX_TRANSLATION_LENGTH=50000)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_within_char_limit_succeeds(self, mock_translator_cls):
+        """A document within MAX_TRANSLATION_LENGTH should translate normally."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx = SimpleUploadedFile("small.docx", _make_docx_bytes())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.COMPLETED)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, MAX_TRANSLATION_LENGTH=0)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_limit_disabled_allows_any_size(self, mock_translator_cls):
+        """With MAX_TRANSLATION_LENGTH=0, any document should be accepted."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx = SimpleUploadedFile("any.docx", _make_docx_bytes())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.COMPLETED)
+
+    def test_count_chars_docx(self):
+        """_count_chars_docx should count characters in a .docx file."""
+        from docx import Document as DocxDocument
+        from .views import _count_chars_docx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("Hallo Welt")  # 10 chars
+            doc.add_paragraph("Noch mehr Text")  # 14 chars
+            doc.save(path)
+
+            count = _count_chars_docx(path)
+            self.assertEqual(count, 24)
+
+    def test_count_chars_docx_empty(self):
+        """Empty docx should return 0 characters."""
+        from docx import Document as DocxDocument
+        from .views import _count_chars_docx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "empty.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("")
+            doc.save(path)
+
+            count = _count_chars_docx(path)
+            self.assertEqual(count, 0)
+
+    def test_count_chars_pptx(self):
+        """_count_chars_pptx should count characters in a .pptx file."""
+        from pptx import Presentation
+        from pptx.util import Inches
+        from .views import _count_chars_pptx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "test.pptx")
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[1])
+            slide.shapes.title.text = "Titel"  # 5 chars
+            slide.placeholders[1].text = "Hallo Welt"  # 10 chars
+            prs.save(path)
+
+            count = _count_chars_pptx(path)
+            self.assertEqual(count, 15)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, MAX_TRANSLATION_LENGTH=10)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_error_message_contains_exceeded_percentage(self, mock_translator_cls):
+        """Error message should contain the allowed limit and exceeded percentage."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        # Build docx with lots of text (well over 10 chars)
+        from docx import Document as DocxDocument
+        buf = BytesIO()
+        doc = DocxDocument()
+        doc.add_paragraph("This is a much longer paragraph that exceeds ten characters definitely")
+        doc.save(buf)
+        docx = SimpleUploadedFile("over.docx", buf.getvalue())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        # Error message should mention the limit (10) and a percentage
+        self.assertIn("10", job.error_message)
+        self.assertIn("%", job.error_message)
+
+
+# ============================================================================
+# File Cleanup on Failure Tests
+# ============================================================================
+
+class FailedJobFileCleanupTest(TestCase):
+    """Test that files are deleted immediately when a job fails."""
+
+    def setUp(self):
+        self.client = Client()
+        from .views import _GlossaryCache
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")
+
+    def _patch_empty_glossary(self):
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_api_error_deletes_file(self, mock_translator_cls):
+        """A DeepL API error should delete the uploaded file from disk."""
+        import deepl as deepl_lib
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_translator.translate_text.side_effect = deepl_lib.DeepLException("error")
+
+        docx = SimpleUploadedFile("secret.docx", _make_docx_bytes())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        # result_path should be cleared (file deleted)
+        self.assertEqual(job.result_path, "")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True, MAX_TRANSLATION_LENGTH=5)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_char_limit_exceeded_deletes_file(self, mock_translator_cls):
+        """Exceeding char limit should delete the uploaded file from disk."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        docx = SimpleUploadedFile("big.docx", _make_docx_bytes())
+
+        def run_sync(**kwargs):
+            target = kwargs["target"]
+            t_args = kwargs.get("args", ())
+            mock_t = MagicMock()
+            mock_t.start = lambda: target(*t_args)
+            return mock_t
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread", side_effect=run_sync):
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
+        self.assertEqual(job.result_path, "")
+        mock_translator.translate_text.assert_not_called()
+
+
+# ============================================================================
+# Stale Failed Job Cleanup Test
+# ============================================================================
+
+class StaleFailedJobCleanupTest(TestCase):
+    """Test that failed job files are also cleaned up by the lazy cleanup."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_stale_failed_job_cleaned(self):
+        """A failed job older than 10 min that still has result_path should be cleaned."""
+        from .views import _cleanup_stale_document_jobs
+
+        job = DocumentTranslationJob.objects.create(
+            session_key="cleanup-fail-test",
+            original_filename="fail.docx",
+            file_type=".docx",
+            file_size=512,
+            direction="DE->EN-GB|",
+            output_filename="fail_en.docx",
+            status=DocumentTranslationJob.Status.FAILED,
+            error_message="Some error",
+        )
+        # Backdate
+        DocumentTranslationJob.objects.filter(pk=job.pk).update(
+            created_at=timezone.now() - timedelta(minutes=15),
+        )
+        job.refresh_from_db()
+
+        # Create file on disk
+        job_dir = os.path.join(self.tmp_dir, "doc_translations", str(job.id))
+        os.makedirs(job_dir, exist_ok=True)
+        filepath = os.path.join(job_dir, "fail.docx")
+        with open(filepath, "wb") as f:
+            f.write(b"sensitive content")
+        job.result_path = os.path.join("doc_translations", str(job.id), "fail.docx")
+        job.save(update_fields=["result_path"])
+
+        with self.settings(MEDIA_ROOT=self.tmp_dir):
+            _cleanup_stale_document_jobs()
+
+        self.assertFalse(os.path.isfile(filepath))
+        job.refresh_from_db()
+        self.assertEqual(job.result_path, "")
+
+
+# ============================================================================
+# Filename Sanitisation Test
+# ============================================================================
+
+class FilenameSanitisationTest(TestCase):
+    """Test that uploaded filenames are sanitised to prevent path-traversal."""
+
+    def setUp(self):
+        self.client = Client()
+        from .views import _GlossaryCache
+        self._empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        self._empty_cache._cache = {}
+        self._empty_cache._loaded_at = float("inf")
+
+    def _patch_empty_glossary(self):
+        return patch("deeplFrontend.views.glossary_cache", self._empty_cache)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_path_traversal_stripped(self, mock_translator_cls):
+        """Directory components in the filename should be stripped."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        docx_bytes = _make_docx_bytes()
+        docx = SimpleUploadedFile("../../etc/evil.docx", docx_bytes)
+
+        with self._patch_empty_glossary(), \
+             patch("deeplFrontend.views.threading.Thread") as mock_thread:
+            mock_thread.return_value = MagicMock()
+            response = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|",
+                "document": docx,
+            })
+        self.assertEqual(response.status_code, 200)
+        job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
+        # The job should store only the base filename
+        self.assertEqual(job.original_filename, "evil.docx")
+        self.assertNotIn("..", job.result_path)
+        self.assertNotIn("..", job.output_filename)
+
+
+# ============================================================================
+# Feature-Off Isolation Test
+# ============================================================================
+
+class FeatureOffIsolationTest(TestCase):
+    """Verify the app works normally with DOCUMENT_TRANSLATION_ENABLED=False."""
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_text_translation_works_when_doc_feature_off(self, mock_translator_cls):
+        """Text translation should function normally with doc feature disabled."""
+        from .views import _GlossaryCache
+        empty_cache = _GlossaryCache.__new__(_GlossaryCache)
+        empty_cache._cache = {}
+        empty_cache._loaded_at = float("inf")
+
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+
+        mock_result = MagicMock()
+        mock_result.text = "Hello World"
+        mock_result.detected_source_lang = "DE"
+        mock_translator.translate_text.return_value = mock_result
+
+        mock_usage = MagicMock()
+        mock_usage.character.count = 100
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        client = Client()
+        with patch("deeplFrontend.views.glossary_cache", empty_cache):
+            response = client.post(reverse("translation-form"), {
+                "sourceText": "Hallo Welt",
+                "directionChoice": "DE->EN-GB|",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hello World")
+        # No doc_form in context when disabled? Actually doc_form is always passed.
+        # But no active_doc_job_json
+        self.assertNotIn("active_doc_job_json", response.context)
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_no_cleanup_runs_when_disabled(self):
+        """_cleanup_stale_document_jobs should not be called when feature is off."""
+        client = Client()
+        with patch("deeplFrontend.views._cleanup_stale_document_jobs") as mock_cleanup:
+            client.get(reverse("translation-form"))
+        mock_cleanup.assert_not_called()
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_all_doc_endpoints_return_404_or_405(self):
+        """Document endpoints should be inaccessible when feature is off."""
+        client = Client()
+        # POST to document-translation
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        resp = client.post(reverse("document-translation"), {
+            "directionChoice": "DE->EN-GB|",
+            "document": docx,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+        # GET to status endpoint
+        import uuid
+        fake_id = str(uuid.uuid4())
+        resp = client.get(reverse("document-job-status", args=[fake_id]))
+        self.assertEqual(resp.status_code, 404)
+
+        # GET to download endpoint
+        resp = client.get(reverse("document-download", args=[fake_id]))
+        self.assertEqual(resp.status_code, 404)

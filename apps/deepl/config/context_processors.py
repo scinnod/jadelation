@@ -88,4 +88,5 @@ def app_settings(request):
         'SECONDARY_COLOR': settings.SECONDARY_COLOR,
         'SSO_LOGOUT_URL': settings.SSO_LOGOUT_URL,
         'MAX_TRANSLATION_LENGTH': getattr(settings, 'MAX_TRANSLATION_LENGTH', 0),
+        'DOCUMENT_TRANSLATION_ENABLED': getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False),
     }
