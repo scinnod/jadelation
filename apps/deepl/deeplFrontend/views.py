@@ -293,7 +293,6 @@ def deepl_translation(request):
 
             # Perform translation if direction known
             if direction != "auto":
-                character_count += len(form.cleaned_data["sourceText"])
                 
                 # Parse direction string
                 direction_parts = direction.split("|")
@@ -332,9 +331,20 @@ def deepl_translation(request):
                         model_type=DEEPL_MODEL_TYPE_TRANSLATION,
                     )
                     translation = result.text
+                    character_count += len(form.cleaned_data["sourceText"])
                     
                 except deepl.DeepLException as e:
                     logger.error(f"DeepL API error during translation: {e}")
+                    # Record detection characters that were already consumed
+                    if character_count > 0:
+                        try:
+                            Translation.objects.create(
+                                characters=character_count,
+                                direction=direction,
+                                auto_detection=auto_detection,
+                            )
+                        except Exception:
+                            pass
                     return HttpResponse(
                         _(
                             "ERROR: The API services at DeepL are currently unavailable. "
@@ -343,6 +353,15 @@ def deepl_translation(request):
                     )
                 except Exception as e:
                     logger.exception(f"Unexpected error during translation: {e}")
+                    if character_count > 0:
+                        try:
+                            Translation.objects.create(
+                                characters=character_count,
+                                direction=direction,
+                                auto_detection=auto_detection,
+                            )
+                        except Exception:
+                            pass
                     return HttpResponse(
                         _("ERROR: An unexpected error occurred. Please try again later.")
                     )
@@ -571,7 +590,8 @@ def _translate_text_fragment(translator, text, source_lang, target_lang,
 
 
 def _translate_docx(filepath, translator, source_lang, target_lang,
-                    formality, glossary, model_type, deadline=None):
+                    formality, glossary, model_type, deadline=None,
+                    count_only=False):
     """Translate all text in a .docx file **in-place**.
 
     Paragraphs from the document body, headers, footers, and tables are
@@ -586,6 +606,11 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
     degrading translation quality – and (b) lose inter-run whitespace
     because the API trims leading/trailing spaces from short fragments.
 
+    When *count_only* is ``True`` the file is parsed but no API calls
+    are made and the file is **not** modified.  This is used for the
+    pre-flight character-count check and guarantees the exact same
+    traversal logic as the real translation pass.
+
     Returns ``(char_count, api_calls)``.
     """
     from docx import Document
@@ -594,7 +619,7 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
     char_count = 0
     api_calls = 0
 
-    def translate_paragraph(para):
+    def process_paragraph(para):
         nonlocal char_count, api_calls
         runs = para.runs
         if not runs:
@@ -603,6 +628,8 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
         if not full_text or not full_text.strip():
             return
         char_count += len(full_text)
+        if count_only:
+            return
         api_calls += 1
         translated = _translate_text_fragment(
             translator, full_text,
@@ -617,34 +644,51 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
 
     # Body paragraphs
     for para in doc.paragraphs:
-        translate_paragraph(para)
+        process_paragraph(para)
 
     # Tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    translate_paragraph(para)
+                    process_paragraph(para)
 
-    # Headers and footers
+    # Headers and footers (deduplicate linked sections that share the
+    # same XML element to avoid translating the same text twice).
+    # We must keep strong references to the lxml element proxies;
+    # otherwise the GC can collect them and a subsequent access to the
+    # same XML node creates a *new* proxy with a different id().
+    seen_elements = []
+    seen_element_ids = set()
     for section in doc.sections:
         for header_footer in (section.header, section.footer):
             if header_footer is not None:
                 for para in header_footer.paragraphs:
-                    translate_paragraph(para)
+                    elem = para._element
+                    elem_id = id(elem)
+                    if elem_id in seen_element_ids:
+                        continue
+                    seen_element_ids.add(elem_id)
+                    seen_elements.append(elem)  # prevent GC
+                    process_paragraph(para)
 
-    doc.save(filepath)
+    if not count_only:
+        doc.save(filepath)
     return char_count, api_calls
 
 
 def _translate_pptx(filepath, translator, source_lang, target_lang,
-                    formality, glossary, model_type, deadline=None):
+                    formality, glossary, model_type, deadline=None,
+                    count_only=False):
     """Translate all text in a .pptx file **in-place**.
 
     Every text frame on every slide (including grouped shapes, tables and
     notes) is processed.  The full paragraph text is translated as a
     single unit and placed into the first run; remaining runs are emptied.
     See ``_translate_docx`` for the rationale.
+
+    When *count_only* is ``True`` the file is parsed but no API calls
+    are made and the file is **not** modified.
 
     Returns ``(char_count, api_calls)``.
     """
@@ -654,7 +698,7 @@ def _translate_pptx(filepath, translator, source_lang, target_lang,
     char_count = 0
     api_calls = 0
 
-    def translate_paragraph(para):
+    def process_paragraph(para):
         nonlocal char_count, api_calls
         runs = para.runs
         if not runs:
@@ -663,6 +707,8 @@ def _translate_pptx(filepath, translator, source_lang, target_lang,
         if not full_text or not full_text.strip():
             return
         char_count += len(full_text)
+        if count_only:
+            return
         api_calls += 1
         translated = _translate_text_fragment(
             translator, full_text,
@@ -678,12 +724,12 @@ def _translate_pptx(filepath, translator, source_lang, target_lang,
         """Recursively process shapes, including groups and tables."""
         if shape.has_text_frame:
             for para in shape.text_frame.paragraphs:
-                translate_paragraph(para)
+                process_paragraph(para)
         if shape.has_table:
             for row in shape.table.rows:
                 for cell in row.cells:
                     for para in cell.text_frame.paragraphs:
-                        translate_paragraph(para)
+                        process_paragraph(para)
         if hasattr(shape, "shapes"):
             # Group shape – recurse into children
             for child in shape.shapes:
@@ -696,9 +742,10 @@ def _translate_pptx(filepath, translator, source_lang, target_lang,
         # Slide notes
         if slide.has_notes_slide:
             for para in slide.notes_slide.notes_text_frame.paragraphs:
-                translate_paragraph(para)
+                process_paragraph(para)
 
-    prs.save(filepath)
+    if not count_only:
+        prs.save(filepath)
     return char_count, api_calls
 
 
@@ -710,68 +757,25 @@ def _lang_suffix(target_lang):
 # ---------------------------------------------------------------------------
 # Document character counting (pre-flight check)
 # ---------------------------------------------------------------------------
+# Thin wrappers that reuse the translation functions in count-only mode.
+# This guarantees the counting pass traverses exactly the same paragraphs
+# as the real translation pass — no risk of diverging implementations.
+# ---------------------------------------------------------------------------
 
 def _count_chars_docx(filepath):
     """Return the total character count of a .docx file (without translating)."""
-    from docx import Document
-
-    doc = Document(filepath)
-    total = 0
-
-    def count_paragraph(para):
-        nonlocal total
-        text = "".join(run.text for run in para.runs)
-        if text and text.strip():
-            total += len(text)
-
-    for para in doc.paragraphs:
-        count_paragraph(para)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    count_paragraph(para)
-    for section in doc.sections:
-        for header_footer in (section.header, section.footer):
-            if header_footer is not None:
-                for para in header_footer.paragraphs:
-                    count_paragraph(para)
-    return total
+    char_count, _ = _translate_docx(
+        filepath, None, None, None, None, None, None, count_only=True,
+    )
+    return char_count
 
 
 def _count_chars_pptx(filepath):
     """Return the total character count of a .pptx file (without translating)."""
-    from pptx import Presentation
-
-    prs = Presentation(filepath)
-    total = 0
-
-    def count_paragraph(para):
-        nonlocal total
-        text = "".join(run.text for run in para.runs)
-        if text and text.strip():
-            total += len(text)
-
-    def process_shape(shape):
-        if shape.has_text_frame:
-            for para in shape.text_frame.paragraphs:
-                count_paragraph(para)
-        if shape.has_table:
-            for row in shape.table.rows:
-                for cell in row.cells:
-                    for para in cell.text_frame.paragraphs:
-                        count_paragraph(para)
-        if hasattr(shape, "shapes"):
-            for child in shape.shapes:
-                process_shape(child)
-
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            process_shape(shape)
-        if slide.has_notes_slide:
-            for para in slide.notes_slide.notes_text_frame.paragraphs:
-                count_paragraph(para)
-    return total
+    char_count, _ = _translate_pptx(
+        filepath, None, None, None, None, None, None, count_only=True,
+    )
+    return char_count
 
 
 # ---------------------------------------------------------------------------

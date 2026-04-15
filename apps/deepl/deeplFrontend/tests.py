@@ -2096,6 +2096,38 @@ class TranslateDocxHelperTest(TestCase):
             self.assertEqual(char_count, 6)
             self.assertEqual(api_calls, 1)
 
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_linked_headers_not_translated_twice(self, mock_translator_cls):
+        """Linked section headers/footers must not be translated multiple times."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "linked.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("Body")
+            s = doc.sections[0]
+            s.header.is_linked_to_previous = False
+            s.header.paragraphs[0].add_run("Header")
+            s.footer.is_linked_to_previous = False
+            s.footer.paragraphs[0].add_run("Footer")
+            # Add a second section with linked (default) header/footer
+            doc.add_section()
+            doc.save(path)
+
+            char_count, api_calls = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+            # Body (4) + Header (6) + Footer (6) = 16 chars, 3 API calls
+            # The linked second section should NOT add extra calls
+            self.assertEqual(api_calls, 3)
+            self.assertEqual(char_count, 16)
+
 
 class TranslatePptxHelperTest(TestCase):
     """Test _translate_pptx helper with real pptx files."""
