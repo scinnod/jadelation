@@ -203,7 +203,7 @@ CSRF_COOKIE_SAMESITE = "Lax"  # CSRF cookie sent only with same-site requests
 SESSION_COOKIE_SECURE = not DEBUG  # Require HTTPS for session cookie in production
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
 SESSION_COOKIE_SAMESITE = "Lax"  # Session cookie sent only with same-site requests
-SESSION_COOKIE_AGE = 3600  # Session expires after 1 hour of inactivity
+SESSION_COOKIE_AGE = 1209600  # Session expires after 2 weeks
 
 # Security headers
 SECURE_CONTENT_TYPE_NOSNIFF = True  # Prevent MIME type sniffing
