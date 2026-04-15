@@ -189,5 +189,8 @@ Ensure `python-docx` and `python-pptx` are installed. In Docker, rebuild the ima
 docker-compose build deepl
 ```
 
+### "An unexpected error occurred" on upload / 413 Request Entity Too Large
+The built-in nginx is configured with `client_max_body_size 55M`. If you have a **downstream reverse proxy** (e.g. Nginx Proxy Manager, Traefik, or another nginx instance), make sure it also allows request bodies of at least 55 MB. The default `client_max_body_size` in nginx is only 1 MB; uploads exceeding that limit will be rejected with a `413` error which surfaces in the UI as a generic "unexpected error" because the non-JSON error page cannot be parsed by the JavaScript client.
+
 ### Error processing the document
 Ensure the uploaded file is a valid, uncorrupted `.docx` or `.pptx` file. Password-protected or DRM-restricted documents cannot be processed.

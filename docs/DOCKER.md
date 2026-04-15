@@ -140,6 +140,8 @@ The application uses a multi-container Docker setup:
 
 **Health Check**: HTTP request to localhost every 30s
 
+**Upload Size Limit**: The `client_max_body_size` directive is set to `55M` to allow document uploads up to 50 MB (the limit enforced by the Django form, plus multipart overhead). If you run an **external reverse proxy** in front of this container, you must configure a matching or higher body size limit there as well — otherwise the outer proxy will reject large uploads with a `413 Request Entity Too Large` error before they reach this nginx.
+
 ### DeepL Application Container
 
 **Base Image**: `python:3.12-slim`  
