@@ -8,6 +8,7 @@ Imports base settings and overrides only what's necessary for testing.
 """
 
 import os
+import tempfile
 
 # Set required environment variables BEFORE importing base settings
 # (base settings raises ValueError if these are missing)
@@ -32,6 +33,10 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+# Use a temporary directory for MEDIA_ROOT so tests never write to the real
+# data/media/ folder.  The conftest.py session fixture cleans this up.
+MEDIA_ROOT = tempfile.mkdtemp(prefix="deepl_test_media_")
 
 # Simplified password hashing for faster tests
 PASSWORD_HASHERS = [
