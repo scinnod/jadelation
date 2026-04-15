@@ -67,9 +67,10 @@ msgstr ""
 "oder .pptx-Datei hoch."
 
 #, python-format
-msgid "The file is too large (%(size)s MB). Maximum allowed size is 50 MB."
+msgid "The file is too large (%(size)s MB). Maximum allowed size is %(limit)s MB."
 msgstr ""
-"Die Datei ist zu groß (%(size)s MB). Die maximale Dateigröße beträgt 50 MB."
+"Die Datei ist zu groß (%(size)s MB). Die maximale Dateigröße beträgt "
+"%(limit)s MB."
 
 msgid "Time stamp"
 msgstr "Zeitstempel"
@@ -320,6 +321,14 @@ msgstr ""
 "Unterstützte Formate: .docx (Word), .pptx (PowerPoint). Maximale Dateigröße: "
 "50 MB."
 
+#, python-format
+msgid ""
+"Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: "
+"%(limit)s MB."
+msgstr ""
+"Unterstützte Formate: .docx (Word), .pptx (PowerPoint). Maximale "
+"Dateigröße: %(limit)s MB."
+
 msgid ""
 "The entire text of each paragraph is translated in one API call. Mixed "
 "character formatting (e.g. individual bold or italic words) within a "
@@ -347,8 +356,29 @@ msgstr "Zeichen"
 msgid "Uploading…"
 msgstr "Wird hochgeladen…"
 
+msgid "Unsupported file type. Please upload a .docx or .pptx file."
+msgstr ""
+"Nicht unterstützter Dateityp. Bitte laden Sie eine .docx- oder .pptx-Datei "
+"hoch."
+
+msgid "The file is too large. Maximum allowed size is 50 MB."
+msgstr "Die Datei ist zu groß. Die maximale Dateigröße beträgt 50 MB."
+
+#, python-format
+msgid ""
+"The file is too large. Maximum allowed size is %(limit)s MB."
+msgstr ""
+"Die Datei ist zu groß. Die maximale Dateigröße beträgt %(limit)s MB."
+
 msgid "An unexpected error occurred."
 msgstr "Ein unerwarteter Fehler ist aufgetreten."
+
+msgid ""
+"Document translation is currently not available. Please reload the page and "
+"try again."
+msgstr ""
+"Die Dokumentübersetzung ist derzeit nicht verfügbar. Bitte laden Sie die "
+"Seite neu und versuchen Sie es erneut."
 
 msgid "Unknown error."
 msgstr "Unbekannter Fehler."

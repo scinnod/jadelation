@@ -104,6 +104,7 @@ def app_settings(request):
         'SECONDARY_COLOR': settings.SECONDARY_COLOR,
         'SSO_LOGOUT_URL': settings.SSO_LOGOUT_URL,
         'MAX_TRANSLATION_LENGTH': getattr(settings, 'MAX_TRANSLATION_LENGTH', 0),
+        'MAX_DOCUMENT_SIZE_MB': getattr(settings, 'MAX_DOCUMENT_SIZE_MB', 50),
         'DOCUMENT_TRANSLATION_ENABLED': doc_trans_enabled,
         'BETA_MODE': doc_trans == "beta" and doc_trans_enabled,
     }

@@ -157,6 +157,10 @@ BETA_KEYS = [
 ]
 BETA_KEY_MIN_LENGTH = int(os.getenv("BETA_KEY_MIN_LENGTH", "20"))
 
+# Maximum document upload size in megabytes.  Files exceeding this limit are
+# rejected both client-side (JavaScript) and server-side (form validation).
+MAX_DOCUMENT_SIZE_MB = int(os.getenv("MAX_DOCUMENT_SIZE_MB", "50"))
+
 # Maximum wall-clock time (in seconds) for a single document translation job.
 # When the limit is reached the background worker aborts and marks the job as
 # failed.  Set to 0 to disable the timeout (not recommended in production).

@@ -71,12 +71,12 @@ class DocumentTranslationForm(forms.Form):
                 code="invalid_extension",
                 params={"ext": ext},
             )
-        # Limit file size to 50 MB
-        max_size = 50 * 1024 * 1024
+        max_mb = getattr(settings, "MAX_DOCUMENT_SIZE_MB", 50)
+        max_size = max_mb * 1024 * 1024
         if uploaded.size > max_size:
             raise forms.ValidationError(
-                _("The file is too large (%(size)s MB). Maximum allowed size is 50 MB."),
+                _("The file is too large (%(size)s MB). Maximum allowed size is %(limit)s MB."),
                 code="file_too_large",
-                params={"size": round(uploaded.size / (1024 * 1024), 1)},
+                params={"size": round(uploaded.size / (1024 * 1024), 1), "limit": max_mb},
             )
         return uploaded

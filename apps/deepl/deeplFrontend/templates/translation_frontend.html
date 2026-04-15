@@ -202,7 +202,7 @@
           <div class="mt-3 text-secondary">
             <small>
               <em>
-                {% translate "Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: 50 MB." %}
+                {% blocktranslate with limit=MAX_DOCUMENT_SIZE_MB %}Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: {{ limit }} MB.{% endblocktranslate %}
                 {% translate "The entire text of each paragraph is translated in one API call. Mixed character formatting (e.g. individual bold or italic words) within a paragraph may not be preserved." %}
                 {% translate "Please check the formatting of the translated document before use." %}
               </em>
@@ -350,18 +350,44 @@
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
       }
 
+      // Client-side file validation (defence-in-depth; server validates too)
+      var allowedExtensions = ['.docx', '.pptx'];
+      var maxFileSizeMB = {{ MAX_DOCUMENT_SIZE_MB }};
+      var maxFileSize = maxFileSizeMB * 1024 * 1024;
+
+      function validateFile(file) {
+        if (!file) return null;
+        var name = file.name.toLowerCase();
+        var ext = name.substring(name.lastIndexOf('.'));
+        if (allowedExtensions.indexOf(ext) === -1) {
+          return '{% translate "Unsupported file type. Please upload a .docx or .pptx file." %}';
+        }
+        if (file.size > maxFileSize) {
+          return '{% blocktranslate with limit=MAX_DOCUMENT_SIZE_MB %}The file is too large. Maximum allowed size is {{ limit }} MB.{% endblocktranslate %}';
+        }
+        return null;
+      }
+
       // Submit form via fetch
       $('#doc-upload-form').on('submit', function (e) {
         e.preventDefault();
         $formErrors.addClass('d-none');
+
+        var fileInput = document.getElementById('id_document');
+        var file = fileInput.files[0] || null;
+        var validationError = validateFile(file);
+        if (validationError) {
+          $formErrors.text(validationError).removeClass('d-none');
+          return;
+        }
+
         $submitBtn.prop('disabled', true).html(
           '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' +
           '{% translate "Uploading…" %}'
         );
 
         var formData = new FormData(this);
-        var fileInput = document.getElementById('id_document');
-        var fileName = fileInput.files[0] ? fileInput.files[0].name : '';
+        var fileName = file ? file.name : '';
 
         fetch('{% url "document-translation" %}', {
           method: 'POST',
@@ -369,7 +395,7 @@
           headers: { 'X-CSRFToken': csrfToken }
         })
         .then(function (resp) {
-          return resp.json().then(function (data) { return { ok: resp.ok, data: data }; });
+          return resp.json().then(function (data) { return { ok: resp.ok, status: resp.status, data: data }; });
         })
         .then(function (result) {
           if (result.ok) {
@@ -381,7 +407,9 @@
           } else {
             $submitBtn.prop('disabled', false).html(translateBtnHtml);
             var data = result.data;
-            if (data.errors) {
+            if (result.status === 404) {
+              $formErrors.text('{% translate "Document translation is currently not available. Please reload the page and try again." %}').removeClass('d-none');
+            } else if (data.errors) {
               var msgs = [];
               for (var f in data.errors) { msgs.push(data.errors[f]); }
               $formErrors.html(msgs.join('<br>')).removeClass('d-none');
