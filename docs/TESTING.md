@@ -206,3 +206,7 @@ docker-compose exec deepl python -m pytest --cov=deeplFrontend --cov-report=xml
 | `TranslateTextFragmentTest` | `_translate_text_fragment`: empty, whitespace, API call |
 | `LangSuffixTest` | `_lang_suffix` helper |
 | `DocumentTranslationSettingsTest` | Feature flag and context processor |
+| `BetaKeyActivationTest` | Beta easter-egg: slugification, activation, skip-translation, re-validation, revocation |
+| `BetaDeactivationTest` | Deactivate-beta endpoint: session clear, redirect, POST-only |
+| `BetaDocumentTranslationTest` | Beta UI bar, doc tab visibility, context flags, endpoint gating |
+| `BetaHelperFunctionTest` | `_is_doc_translation_possible` / `_is_doc_translation_enabled` tri-state logic |

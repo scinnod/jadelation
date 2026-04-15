@@ -19,6 +19,48 @@ DOCUMENT_TRANSLATION_ENABLED=True
 
 When disabled (the default), the translation page shows only the text translation form. When enabled, a tabbed interface appears with **Text Translation** and **Document Translation (Beta)** tabs.
 
+### Beta Mode (Easter Egg)
+
+Instead of enabling document translation for everyone, you can gate it
+behind an "easter egg" activation phrase:
+
+```bash
+DOCUMENT_TRANSLATION_ENABLED=beta
+BETA_KEYS=please activate beta features now
+```
+
+With this configuration, the document translation tab stays hidden until a
+user types one of the configured key phrases into the **text translation**
+field and submits it.  The phrase is compared in a *slugified* form
+(case-insensitive, all spaces and punctuation removed), so `Please,
+Activate Beta-Features… Now!` matches `please activate beta features now`.
+
+**How it works:**
+
+1. A user types a beta key as translation source text and submits.
+2. The server recognises the key phrase, **skips the translation** (the
+   phrase is never sent to DeepL), and activates beta mode for the session.
+3. The page reloads with the document translation tab visible and a blue
+   **beta bar** at the top of the page.
+4. The user can deactivate beta mode at any time via the "Deactivate"
+   button in the beta bar.
+5. The stored session key is **re-validated** against the current
+   `BETA_KEYS` list on every request.  If an administrator removes a key
+   from the list, all users who activated with that key are revoked
+   immediately.
+
+**Safety measures:**
+
+- Each key must be at least `BETA_KEY_MIN_LENGTH` characters long (default:
+  20).  Shorter keys in the list are silently ignored.  This prevents
+  accidental activation through normal translation text.
+- Only an **exact** slugified match activates beta — partial matches or
+  superstrings do not trigger it.
+- Multiple comma-separated keys are supported:
+  ```bash
+  BETA_KEYS=please activate beta features now,another secret phrase here
+  ```
+
 ## How It Works
 
 1. The user selects a translation direction (e.g., German → English) and uploads a `.docx` or `.pptx` file.
@@ -103,7 +145,9 @@ editing history, not intentional formatting differences.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DOCUMENT_TRANSLATION_ENABLED` | `False` | Enable the document translation tab |
+| `DOCUMENT_TRANSLATION_ENABLED` | `False` | `True` – visible to all, `False` – hidden, `beta` – visible only after easter-egg activation |
+| `BETA_KEYS` | *(empty)* | Comma-separated list of activation phrases for beta mode (min 20 chars each) |
+| `BETA_KEY_MIN_LENGTH` | `20` | Minimum character length for each beta key; shorter keys are silently ignored |
 | `DOCUMENT_TRANSLATION_TIMEOUT` | `180` | Maximum wall-clock seconds for a single document translation (0 = unlimited) |
 | `MAX_TRANSLATION_LENGTH` | `0` | Maximum characters allowed per document (0 = unlimited).  Before translation begins a pre-flight check counts the characters in the uploaded document; if the count exceeds this limit the job fails immediately. |
 
