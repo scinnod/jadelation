@@ -78,6 +78,22 @@ def app_settings(request):
     # Replace {year} placeholder with current year
     footer_text = settings.FOOTER_TEXT.replace('{year}', str(datetime.now().year))
 
+    # Resolve document-translation feature flag (True / False / "beta")
+    doc_trans = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
+    if doc_trans is True:
+        doc_trans_enabled = True
+    elif doc_trans == "beta":
+        key = request.session.get('beta_key', '')
+        if key and key in getattr(settings, 'BETA_KEYS', []):
+            doc_trans_enabled = True
+        else:
+            if key:
+                # Key was revoked – clean up the session.
+                request.session.pop('beta_key', None)
+            doc_trans_enabled = False
+    else:
+        doc_trans_enabled = False
+
     return {
         'APP_TITLE': app_title,
         'ORGANIZATION_NAME': organization_name,
@@ -88,5 +104,6 @@ def app_settings(request):
         'SECONDARY_COLOR': settings.SECONDARY_COLOR,
         'SSO_LOGOUT_URL': settings.SSO_LOGOUT_URL,
         'MAX_TRANSLATION_LENGTH': getattr(settings, 'MAX_TRANSLATION_LENGTH', 0),
-        'DOCUMENT_TRANSLATION_ENABLED': getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False),
+        'DOCUMENT_TRANSLATION_ENABLED': doc_trans_enabled,
+        'BETA_MODE': doc_trans == "beta" and doc_trans_enabled,
     }

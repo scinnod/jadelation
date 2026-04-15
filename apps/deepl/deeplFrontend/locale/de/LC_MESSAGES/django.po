@@ -471,5 +471,11 @@ msgstr "Datei noch nicht bereit."
 msgid "File no longer available on the server."
 msgstr "Datei ist auf dem Server nicht mehr verfügbar."
 
+msgid "Beta mode is active — experimental features are available."
+msgstr "Beta-Modus ist aktiv — experimentelle Funktionen sind verfügbar."
+
+msgid "Deactivate"
+msgstr "Deaktivieren"
+
 #~ msgid "Type"
 #~ msgstr "Typ"

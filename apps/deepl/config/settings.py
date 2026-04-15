@@ -132,9 +132,30 @@ MAX_TRANSLATION_LENGTH = int(os.getenv("MAX_TRANSLATION_LENGTH", "0"))
 # When enabled, an additional tab is shown on the translation page that allows
 # users to upload .docx or .pptx files for in-place translation.  The document
 # structure and formatting are preserved; only text fragments are translated.
-DOCUMENT_TRANSLATION_ENABLED = os.getenv(
-    "DOCUMENT_TRANSLATION_ENABLED", "False"
-).lower() in ("true", "1", "yes")
+# Allowed values: True / False / "beta"
+#   True  – feature visible to all users
+#   False – feature hidden
+#   "beta" – feature visible only to users who have activated beta mode
+_doc_trans_val = os.getenv("DOCUMENT_TRANSLATION_ENABLED", "False").strip().lower()
+if _doc_trans_val in ("true", "1", "yes"):
+    DOCUMENT_TRANSLATION_ENABLED = True
+elif _doc_trans_val == "beta":
+    DOCUMENT_TRANSLATION_ENABLED = "beta"
+else:
+    DOCUMENT_TRANSLATION_ENABLED = False
+
+# Beta feature access keys.
+# Comma-separated list of activation phrases.  When a user enters one of these
+# phrases as translation text (compared case-insensitively, ignoring spaces
+# and punctuation), beta mode is activated for their session.
+# Each key must be at least BETA_KEY_MIN_LENGTH characters long (default: 20)
+# to avoid accidental activation through normal translations.
+BETA_KEYS = [
+    k.strip()
+    for k in os.getenv("BETA_KEYS", "").split(",")
+    if k.strip()
+]
+BETA_KEY_MIN_LENGTH = int(os.getenv("BETA_KEY_MIN_LENGTH", "20"))
 
 # Maximum wall-clock time (in seconds) for a single document translation job.
 # When the limit is reached the background worker aborts and marks the job as

@@ -3109,3 +3109,308 @@ class FeatureOffIsolationTest(TestCase):
         # GET to download endpoint
         resp = client.get(reverse("document-download", args=[fake_id]))
         self.assertEqual(resp.status_code, 404)
+
+
+# ============================================================================
+# Beta Feature Flag Tests
+# ============================================================================
+
+# A valid beta key (>= 20 characters)
+_BETA_KEY = "please activate beta features now"
+
+
+def _make_beta_mocks():
+    """Return ``(mock_translator, empty_glossary_cache)`` for beta tests.
+
+    The caller is responsible for wiring the translator into the patched
+    ``Translator`` class, typically via ``mock_cls.return_value = translator``.
+    """
+    from .views import _GlossaryCache
+
+    cache = _GlossaryCache.__new__(_GlossaryCache)
+    cache._cache = {}
+    cache._loaded_at = float("inf")
+
+    translator = MagicMock()
+    result = MagicMock()
+    result.text = "Translated"
+    result.detected_source_lang = "EN"
+    translator.translate_text.return_value = result
+
+    usage = MagicMock()
+    usage.character.count = 0
+    usage.character.limit = 500000
+    translator.get_usage.return_value = usage
+
+    return translator, cache
+
+
+def _post_translation(client, text, cache):
+    """POST a text-translation request with glossary cache patched out."""
+    with patch("deeplFrontend.views.glossary_cache", cache):
+        return client.post(reverse("translation-form"), {
+            "sourceText": text,
+            "directionChoice": "DE->EN-GB|",
+        })
+
+
+def _set_beta_session(client, key=_BETA_KEY):
+    """Seed a beta key into the test client's session."""
+    client.get(reverse("translation-form"))
+    session = client.session
+    session["beta_key"] = key
+    session.save()
+
+
+@override_settings(
+    DOCUMENT_TRANSLATION_ENABLED="beta",
+    BETA_KEYS=[_BETA_KEY],
+    BETA_KEY_MIN_LENGTH=20,
+)
+class BetaKeyActivationTest(TestCase):
+    """Test beta key activation, slugification and session re-validation."""
+
+    def setUp(self):
+        self.client = Client()
+
+    # -- slugification -------------------------------------------------------
+
+    def test_slugify_normalises(self):
+        """_slugify_for_beta lowercases, strips non-alnum, and folds unicode."""
+        from .views import _slugify_for_beta
+        self.assertEqual(_slugify_for_beta("Héllo, World! 123"), "helloworld123")
+        self.assertEqual(_slugify_for_beta(""), "")
+
+    # -- activation ----------------------------------------------------------
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_exact_match_activates_and_skips_translation(self, mock_cls):
+        """Typing the beta key activates beta and does NOT translate."""
+        _, cache = _make_beta_mocks()
+        mock_cls.return_value = MagicMock()
+
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            resp = _post_translation(self.client, _BETA_KEY, cache)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.session.get("beta_key"), _BETA_KEY)
+        self.assertEqual(Translation.objects.count(), 0)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_case_and_punctuation_insensitive(self, mock_cls):
+        """Matching ignores case, spaces, punctuation and stores original key."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            _post_translation(
+                self.client,
+                "Please, Activate Beta-Features... Now!",
+                cache,
+            )
+        self.assertEqual(self.client.session.get("beta_key"), _BETA_KEY)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_normal_text_does_not_activate(self, mock_cls):
+        """Normal text, partial matches, and short texts must not trigger beta."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        texts = [
+            "Hello World",
+            "please activate beta features now and more",
+            "prefix please activate beta features now",
+            "beta",
+        ]
+        for text in texts:
+            with patch("deeplFrontend.views.glossary_cache", cache):
+                _post_translation(self.client, text, cache)
+            self.assertIsNone(
+                self.client.session.get("beta_key"),
+                f"'{text}' should not trigger beta",
+            )
+
+    @override_settings(BETA_KEYS=["tooshort"], BETA_KEY_MIN_LENGTH=20)
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_short_key_ignored(self, mock_cls):
+        """Keys shorter than BETA_KEY_MIN_LENGTH are silently skipped."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            _post_translation(self.client, "tooshort", cache)
+        self.assertIsNone(self.client.session.get("beta_key"))
+
+    @override_settings(BETA_KEYS=[])
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_empty_keys_list(self, mock_cls):
+        """An empty BETA_KEYS list never activates beta."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            _post_translation(self.client, _BETA_KEY, cache)
+        self.assertIsNone(self.client.session.get("beta_key"))
+
+    # -- re-validation -------------------------------------------------------
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_valid_key_kept_and_translation_proceeds(self, mock_cls):
+        """A valid session key is kept; translation proceeds normally."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        _set_beta_session(self.client)
+
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            resp = _post_translation(self.client, "Hello World", cache)
+
+        self.assertEqual(self.client.session.get("beta_key"), _BETA_KEY)
+        self.assertContains(resp, "Translated")
+        self.assertEqual(Translation.objects.count(), 1)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_revoked_key_cleared(self, mock_cls):
+        """A session key not in the current BETA_KEYS list is cleared."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        _set_beta_session(self.client, key="old revoked key value here")
+
+        with patch("deeplFrontend.views.glossary_cache", cache):
+            _post_translation(self.client, "normal text", cache)
+
+        self.assertIsNone(self.client.session.get("beta_key"))
+
+
+class BetaDeactivationTest(TestCase):
+    """Test the deactivate-beta endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_post_clears_and_redirects(self):
+        """POST clears session key and redirects to translation form."""
+        _set_beta_session(self.client)
+        resp = self.client.post(reverse("deactivate-beta"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("translation", resp.url)
+        self.assertIsNone(self.client.session.get("beta_key"))
+
+    def test_get_returns_405(self):
+        """GET is not allowed."""
+        self.assertEqual(self.client.get(reverse("deactivate-beta")).status_code, 405)
+
+    def test_idempotent_without_key(self):
+        """Deactivating without an active key still succeeds."""
+        self.assertEqual(self.client.post(reverse("deactivate-beta")).status_code, 302)
+
+
+@override_settings(
+    DOCUMENT_TRANSLATION_ENABLED="beta",
+    BETA_KEYS=[_BETA_KEY],
+    BETA_KEY_MIN_LENGTH=20,
+)
+class BetaDocumentTranslationTest(TestCase):
+    """Test that UI, document endpoints, and context respect beta mode."""
+
+    def setUp(self):
+        self.client = Client()
+
+    # -- UI / context --------------------------------------------------------
+
+    def test_beta_bar_and_tabs_shown_when_active(self):
+        """Beta bar, doc tabs, and context flags are set when beta is active."""
+        _set_beta_session(self.client)
+        resp = self.client.get(reverse("translation-form"))
+        self.assertContains(resp, "beta-bar")
+        self.assertContains(resp, "translationTabs")
+        self.assertTrue(resp.context["BETA_MODE"])
+        self.assertTrue(resp.context["DOCUMENT_TRANSLATION_ENABLED"])
+
+    def test_nothing_shown_when_inactive(self):
+        """Without a beta key nothing beta-related is visible."""
+        resp = self.client.get(reverse("translation-form"))
+        self.assertNotContains(resp, "beta-bar")
+        self.assertNotContains(resp, "translationTabs")
+        self.assertFalse(resp.context["BETA_MODE"])
+        self.assertFalse(resp.context["DOCUMENT_TRANSLATION_ENABLED"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_no_beta_bar_when_feature_true(self):
+        """When fully enabled (True), no beta bar is shown."""
+        resp = self.client.get(reverse("translation-form"))
+        self.assertNotContains(resp, "beta-bar")
+        self.assertFalse(resp.context["BETA_MODE"])
+
+    def test_revoked_key_clears_context(self):
+        """A revoked session key is cleared and BETA_MODE becomes False."""
+        _set_beta_session(self.client, key="old-revoked-key")
+        resp = self.client.get(reverse("translation-form"))
+        self.assertFalse(resp.context["BETA_MODE"])
+        self.assertIsNone(self.client.session.get("beta_key"))
+
+    # -- document endpoints --------------------------------------------------
+
+    def test_upload_blocked_without_beta(self):
+        """Document upload returns 404 without beta key."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        resp = self.client.post(reverse("document-translation"), {
+            "directionChoice": "DE->EN-GB|", "document": docx,
+        })
+        self.assertEqual(resp.status_code, 404)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_upload_allowed_with_beta(self, mock_cls):
+        """Document upload succeeds with a valid beta key."""
+        mock_cls.return_value, cache = _make_beta_mocks()
+        _set_beta_session(self.client)
+
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        with patch("deeplFrontend.views.glossary_cache", cache), \
+             patch("deeplFrontend.views.threading.Thread") as mt:
+            mt.return_value = MagicMock()
+            resp = self.client.post(reverse("document-translation"), {
+                "directionChoice": "DE->EN-GB|", "document": docx,
+            })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("job_id", resp.json())
+
+    def test_status_and_download_blocked_without_beta(self):
+        """Status and download endpoints return 404 without beta key."""
+        import uuid as uuid_mod
+        fake_id = uuid_mod.uuid4()
+        self.assertEqual(
+            self.client.get(reverse("document-job-status", args=[fake_id])).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse("document-download", args=[fake_id])).status_code, 404)
+
+
+class BetaHelperFunctionTest(TestCase):
+    """Unit tests for _is_doc_translation_possible / _is_doc_translation_enabled."""
+
+    def test_possible_values(self):
+        """_is_doc_translation_possible is True for True/'beta', False otherwise."""
+        from .views import _is_doc_translation_possible
+        for val, expected in [(True, True), ("beta", True), (False, False)]:
+            with self.settings(DOCUMENT_TRANSLATION_ENABLED=val):
+                self.assertIs(_is_doc_translation_possible(), expected, msg=f"val={val!r}")
+
+    def test_enabled_resolves_tristate(self):
+        """_is_doc_translation_enabled respects True/False/beta+session."""
+        from .views import _is_doc_translation_enabled
+        factory = RequestFactory()
+
+        # True → always enabled
+        with self.settings(DOCUMENT_TRANSLATION_ENABLED=True):
+            req = factory.get("/"); req.session = {}
+            self.assertTrue(_is_doc_translation_enabled(req))
+
+        # False → never enabled
+        with self.settings(DOCUMENT_TRANSLATION_ENABLED=False):
+            req = factory.get("/"); req.session = {"beta_key": "k"}
+            self.assertFalse(_is_doc_translation_enabled(req))
+
+        # beta + valid key → enabled
+        with self.settings(DOCUMENT_TRANSLATION_ENABLED="beta", BETA_KEYS=["k"]):
+            req = factory.get("/"); req.session = {"beta_key": "k"}
+            self.assertTrue(_is_doc_translation_enabled(req))
+
+        # beta + no key → disabled
+        with self.settings(DOCUMENT_TRANSLATION_ENABLED="beta"):
+            req = factory.get("/"); req.session = {}
+            self.assertFalse(_is_doc_translation_enabled(req))
+
+        # beta + revoked key → disabled and cleared
+        with self.settings(DOCUMENT_TRANSLATION_ENABLED="beta", BETA_KEYS=["k"]):
+            req = factory.get("/"); req.session = {"beta_key": "old"}
+            self.assertFalse(_is_doc_translation_enabled(req))
+            self.assertNotIn("beta_key", req.session)
