@@ -159,6 +159,8 @@ BETA_KEY_MIN_LENGTH = int(os.getenv("BETA_KEY_MIN_LENGTH", "20"))
 
 # Maximum document upload size in megabytes.  Files exceeding this limit are
 # rejected both client-side (JavaScript) and server-side (form validation).
+# Note: values above 50 MB may require matching updates to client_max_body_size
+# in nginx.conf and any downstream edge/reverse proxy.
 MAX_DOCUMENT_SIZE_MB = int(os.getenv("MAX_DOCUMENT_SIZE_MB", "50"))
 
 # Maximum wall-clock time (in seconds) for a single document translation job.
