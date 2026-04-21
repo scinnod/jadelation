@@ -1417,7 +1417,10 @@ class DocumentTranslationFormTest(TestCase):
         docx = SimpleUploadedFile("test.docx", _make_docx_bytes(),
                                   content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={"document": docx},
         )
         self.assertTrue(form.is_valid())
@@ -1427,7 +1430,10 @@ class DocumentTranslationFormTest(TestCase):
         pptx = SimpleUploadedFile("slides.pptx", _make_pptx_bytes(),
                                   content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
         form = DocumentTranslationForm(
-            data={"directionChoice": "EN-GB->DE|more"},
+            data={
+                "directionChoice": "EN-GB->DE|more",
+                "fair_use_confirmed": "on",
+            },
             files={"document": pptx},
         )
         self.assertTrue(form.is_valid())
@@ -1436,7 +1442,10 @@ class DocumentTranslationFormTest(TestCase):
         """Uploading a .txt file should be rejected."""
         txt = SimpleUploadedFile("readme.txt", b"Hello world", content_type="text/plain")
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={"document": txt},
         )
         self.assertFalse(form.is_valid())
@@ -1446,7 +1455,10 @@ class DocumentTranslationFormTest(TestCase):
         """Uploading a .pdf file should be rejected."""
         pdf = SimpleUploadedFile("report.pdf", b"%PDF-1.4", content_type="application/pdf")
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={"document": pdf},
         )
         self.assertFalse(form.is_valid())
@@ -1456,7 +1468,10 @@ class DocumentTranslationFormTest(TestCase):
         """Uploading a .doc (legacy) file should be rejected."""
         doc = SimpleUploadedFile("old.doc", b"\xd0\xcf\x11", content_type="application/msword")
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={"document": doc},
         )
         self.assertFalse(form.is_valid())
@@ -1465,7 +1480,10 @@ class DocumentTranslationFormTest(TestCase):
     def test_missing_file_rejected(self):
         """Submitting without a file should be rejected."""
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={},
         )
         self.assertFalse(form.is_valid())
@@ -1475,7 +1493,7 @@ class DocumentTranslationFormTest(TestCase):
         """Submitting without a direction choice should be rejected."""
         docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
         form = DocumentTranslationForm(
-            data={},
+            data={"fair_use_confirmed": "on"},
             files={"document": docx},
         )
         self.assertFalse(form.is_valid())
@@ -1485,7 +1503,10 @@ class DocumentTranslationFormTest(TestCase):
         """Submitting with an invalid direction choice should be rejected."""
         docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
         form = DocumentTranslationForm(
-            data={"directionChoice": "auto"},
+            data={
+                "directionChoice": "auto",
+                "fair_use_confirmed": "on",
+            },
             files={"document": docx},
         )
         self.assertFalse(form.is_valid())
@@ -1497,7 +1518,10 @@ class DocumentTranslationFormTest(TestCase):
         big = SimpleUploadedFile("huge.docx", b"x", content_type="application/octet-stream")
         big.size = 51 * 1024 * 1024  # 51 MB
         form = DocumentTranslationForm(
-            data={"directionChoice": "DE->EN-GB|"},
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
             files={"document": big},
         )
         self.assertFalse(form.is_valid())
@@ -1573,6 +1597,7 @@ class DocumentTranslationViewGetTest(TestCase):
         response = self.client.post(reverse("document-translation"), {
             "directionChoice": "DE->EN-GB|",
             "document": docx,
+            "fair_use_confirmed": "on",
         })
         self.assertEqual(response.status_code, 404)
 
@@ -1708,6 +1733,7 @@ class DocumentTranslationViewPostTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1738,6 +1764,7 @@ class DocumentTranslationViewPostTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": pptx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1765,6 +1792,7 @@ class DocumentTranslationViewPostTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "EN-GB->DE|more",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1797,6 +1825,7 @@ class DocumentTranslationViewPostTest(TestCase):
             self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(Translation.objects.count(), 1)
         record = Translation.objects.first()
@@ -1829,6 +1858,7 @@ class DocumentTranslationViewPostTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -1845,6 +1875,7 @@ class DocumentTranslationViewPostTest(TestCase):
         response = self.client.post(reverse("document-translation"), {
             "directionChoice": "DE->EN-GB|",
             "document": txt,
+            "fair_use_confirmed": "on",
         })
         self.assertEqual(response.status_code, 400)
         data = response.json()
@@ -1877,6 +1908,7 @@ class DocumentTranslationViewPostTest(TestCase):
             resp1 = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(resp1.status_code, 200)
 
@@ -1886,6 +1918,7 @@ class DocumentTranslationViewPostTest(TestCase):
             resp2 = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx2,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(resp2.status_code, 409)
         data = resp2.json()
@@ -1906,6 +1939,7 @@ class DocumentTranslationViewPostTest(TestCase):
             resp1 = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(resp1.status_code, 200)
         # Mark first job as completed
@@ -1921,6 +1955,7 @@ class DocumentTranslationViewPostTest(TestCase):
             resp2 = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx2,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(resp2.status_code, 200)
 
@@ -2644,6 +2679,7 @@ class DocumentTranslationTimeoutTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -2674,6 +2710,7 @@ class DocumentTranslationTimeoutTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -2723,6 +2760,7 @@ class DocumentCharacterLimitTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -2755,6 +2793,7 @@ class DocumentCharacterLimitTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -2784,6 +2823,7 @@ class DocumentCharacterLimitTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -2862,6 +2902,7 @@ class DocumentCharacterLimitTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
         self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
@@ -2910,6 +2951,7 @@ class FailedJobFileCleanupTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
         self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
@@ -2937,6 +2979,7 @@ class FailedJobFileCleanupTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
         self.assertEqual(job.status, DocumentTranslationJob.Status.FAILED)
@@ -3029,6 +3072,7 @@ class FilenameSanitisationTest(TestCase):
             response = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|",
                 "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(response.status_code, 200)
         job = DocumentTranslationJob.objects.get(pk=response.json()["job_id"])
@@ -3097,6 +3141,7 @@ class FeatureOffIsolationTest(TestCase):
         resp = client.post(reverse("document-translation"), {
             "directionChoice": "DE->EN-GB|",
             "document": docx,
+            "fair_use_confirmed": "on",
         })
         self.assertEqual(resp.status_code, 404)
 
@@ -3345,6 +3390,7 @@ class BetaDocumentTranslationTest(TestCase):
         docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
         resp = self.client.post(reverse("document-translation"), {
             "directionChoice": "DE->EN-GB|", "document": docx,
+            "fair_use_confirmed": "on",
         })
         self.assertEqual(resp.status_code, 404)
 
@@ -3360,6 +3406,7 @@ class BetaDocumentTranslationTest(TestCase):
             mt.return_value = MagicMock()
             resp = self.client.post(reverse("document-translation"), {
                 "directionChoice": "DE->EN-GB|", "document": docx,
+                "fair_use_confirmed": "on",
             })
         self.assertEqual(resp.status_code, 200)
         self.assertIn("job_id", resp.json())
