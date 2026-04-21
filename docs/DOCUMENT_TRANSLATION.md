@@ -61,6 +61,20 @@ Activate Beta-Features… Now!` matches `please activate beta features now`.
   BETA_KEYS=please activate beta features now,another secret phrase here
   ```
 
+## Fair Use Confirmation
+
+Before uploading, users must tick a **confirmation checkbox** affirming that the translation is needed for study, teaching, research, or administrative purposes at Jade University, and that the service – which is funded by Jade University – is being used accordingly.
+
+The checkbox is:
+
+- **Unchecked by default** on every page load and after each "Translate another document" reset.
+- **Required** – the submit button remains disabled until it is checked (enforced client-side via JavaScript, and server-side via a required `BooleanField` validated by Django).
+- Styled with an informational note reminding users that this is a free service provided by the university.
+
+This is a soft awareness measure, not an access restriction.  Its purpose is to encourage responsible use and to make users conscious of the institutional costs of document translation, especially for large files.
+
+> **Security note:** The checkbox is a `BooleanField(required=True)` in `DocumentTranslationForm`.  Django's form validation raises a `ValidationError` when the field is missing or `False`, so the server-side check is independent of the client-side JavaScript.
+
 ## How It Works
 
 1. The user selects a translation direction (e.g., German → English) and uploads a `.docx` or `.pptx` file.

@@ -62,6 +62,14 @@ class DocumentTranslationForm(forms.Form):
         help_text=_("Upload a Word or PowerPoint file. The document structure and formatting will be preserved as far as possible."),
     )
 
+    fair_use_confirmed = forms.BooleanField(
+        required=True,
+        label=_(
+            "I confirm that I need this translation for a purpose in the context "
+            "of study, teaching, research, or administration at Jade University."
+        ),
+    )
+
     def clean_document(self):
         uploaded = self.cleaned_data["document"]
         ext = os.path.splitext(uploaded.name)[1].lower()

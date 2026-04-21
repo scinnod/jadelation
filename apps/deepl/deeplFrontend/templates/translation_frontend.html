@@ -133,7 +133,13 @@
                   <div class="mb-3">
                     {{ doc_form.document | as_crispy_field }}
                   </div>
-                  <button type="submit" class="btn btn-primary" id="doc-submit-btn">
+                  <div class="mb-3">
+                    {{ doc_form.fair_use_confirmed | as_crispy_field }}
+                    <div class="form-text text-secondary">
+                      <small>{% translate "This service is centrally funded by Jade University. Please use it responsibly." %}</small>
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-primary" id="doc-submit-btn" disabled>
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-translate me-1" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
                       <path d="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/>
                       <path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846-.338.287-.725.535l-.262.161q.07.085.143.163 1.13-.208 1.81-.651a8 8 0 0 1-.833-.977 7 7 0 0 1-.763.97M6.938 12.3c.027.318.08.632.157.942a5 5 0 0 1-.65-.175l-.234-.074q.158-.32.297-.651l.065-.145.165.098m.261 1.141q.384.085.786.128a5 5 0 0 1-.647.092l-.139-.22m7.663-2.885a1 1 0 0 0-1-1H11v4.5a2.5 2.5 0 0 1-2.5 2.5h-4v.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1z"/>
@@ -203,7 +209,7 @@
             <small>
               <em>
                 {% blocktranslate with limit=MAX_DOCUMENT_SIZE_MB %}Supported formats: .docx (Word), .pptx (PowerPoint). Maximum file size: {{ limit }} MB.{% endblocktranslate %}
-                {% translate "The entire text of each paragraph is translated in one API call. Mixed character formatting (e.g. individual bold or italic words) within a paragraph may not be preserved." %}
+                {% translate "Mixed character formatting (e.g. individual bold or italic words) within a paragraph may not be preserved." %}
                 {% translate "Please check the formatting of the translated document before use." %}
               </em>
             </small>
@@ -337,11 +343,13 @@
 
       function resetForm() {
         showSection('upload');
-        $submitBtn.prop('disabled', false).html(translateBtnHtml);
+        $submitBtn.prop('disabled', true).html(translateBtnHtml);
         $formErrors.addClass('d-none').text('');
         $('#doc-upload-form')[0].reset();
         currentJobId = null;
         $('#doc-tab-dot').addClass('d-none');
+        // reset() unchecks the checkbox – reflect that in button state
+        updateDocSubmitState();
       }
 
       function formatFileSize(bytes) {
@@ -459,6 +467,15 @@
 
       // "Translate another" / "Try again" buttons
       $('#doc-new-btn, #doc-retry-btn').on('click', resetForm);
+
+      // Enable submit only when fair-use checkbox is checked
+      function updateDocSubmitState() {
+        var checked = $('#id_fair_use_confirmed').is(':checked');
+        $submitBtn.prop('disabled', !checked);
+      }
+      $('#id_fair_use_confirmed').on('change', updateDocSubmitState);
+      // Initialise on page load (checkbox unchecked → button disabled)
+      updateDocSubmitState();
 
       // Hide activity dot when Download is clicked
       $('#doc-download-btn').on('click', function () {
