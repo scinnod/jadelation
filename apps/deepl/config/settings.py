@@ -133,29 +133,32 @@ MAX_TRANSLATION_LENGTH = int(os.getenv("MAX_TRANSLATION_LENGTH", "0"))
 # users to upload .docx or .pptx files for in-place translation.  The document
 # structure and formatting are preserved; only text fragments are translated.
 # Allowed values: True / False / "beta"
-#   True  – feature visible to all users
-#   False – feature hidden
-#   "beta" – feature visible only to users who have activated beta mode
-_doc_trans_val = os.getenv("DOCUMENT_TRANSLATION_ENABLED", "False").strip().lower()
-if _doc_trans_val in ("true", "1", "yes"):
-    DOCUMENT_TRANSLATION_ENABLED = True
-elif _doc_trans_val == "beta":
-    DOCUMENT_TRANSLATION_ENABLED = "beta"
-else:
+#   True    – feature visible to all users
+#   False   – feature hidden (default)
+#   <regex> – visible only to users whose X-Remote-Email matches the regex
+_doc_trans_val = os.getenv("DOCUMENT_TRANSLATION_ENABLED", "False").strip()
+if _doc_trans_val.lower() in ("false", "0", "no", ""):
     DOCUMENT_TRANSLATION_ENABLED = False
+elif _doc_trans_val.lower() in ("true", "1", "yes"):
+    DOCUMENT_TRANSLATION_ENABLED = True
+else:
+    DOCUMENT_TRANSLATION_ENABLED = _doc_trans_val  # treat as regex string
 
-# Beta feature access keys.
-# Comma-separated list of activation phrases.  When a user enters one of these
-# phrases as translation text (compared case-insensitively, ignoring spaces
-# and punctuation), beta mode is activated for their session.
-# Each key must be at least BETA_KEY_MIN_LENGTH characters long (default: 20)
-# to avoid accidental activation through normal translations.
-BETA_KEYS = [
-    k.strip()
-    for k in os.getenv("BETA_KEYS", "").split(",")
-    if k.strip()
-]
-BETA_KEY_MIN_LENGTH = int(os.getenv("BETA_KEY_MIN_LENGTH", "20"))
+# Fair-use confirmation checkbox text for document translation.
+# Set DOCUMENT_TRANSLATION_FAIR_USE_TEXT_EN and DOCUMENT_TRANSLATION_FAIR_USE_TEXT_DE
+# (and other language variants) in the env file to customise the checkbox label shown
+# above the document upload form.  The text typically states the acceptable-use
+# conditions specific to your organisation.
+DOCUMENT_TRANSLATION_FAIR_USE_TEXT = _collect_i18n_env("DOCUMENT_TRANSLATION_FAIR_USE_TEXT", {
+    "en": (
+        "I confirm that I need this translation for a purpose in the context "
+        "of study, teaching, research, or administration."
+    ),
+    "de": (
+        "Ich bestätige, dass ich diese Übersetzung für einen Zweck im Kontext "
+        "von Studium, Lehre, Forschung oder Verwaltung benötige."
+    ),
+})
 
 # Maximum document upload size in megabytes.  Files exceeding this limit are
 # rejected both client-side (JavaScript) and server-side (form validation).
@@ -243,6 +246,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "config.middleware.DocumentTranslationsMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

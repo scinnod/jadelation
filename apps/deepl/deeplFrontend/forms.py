@@ -5,7 +5,7 @@ import os
 
 from django import forms
 from django.conf import settings
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import get_language, gettext_lazy as _
 
 
 class TranslationForm(forms.Form):
@@ -64,11 +64,19 @@ class DocumentTranslationForm(forms.Form):
 
     fair_use_confirmed = forms.BooleanField(
         required=True,
-        label=_(
-            "I confirm that I need this translation for a purpose in the context "
-            "of study, teaching, research, or administration at Jade University."
-        ),
+        label="",  # set dynamically in __init__ from settings
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        fair_use_texts = getattr(settings, "DOCUMENT_TRANSLATION_FAIR_USE_TEXT", {})
+        lang = (get_language() or "en").split("-")[0].lower()
+        label = (
+            fair_use_texts.get(lang)
+            or fair_use_texts.get("en")
+            or next(iter(fair_use_texts.values()), "")
+        )
+        self.fields["fair_use_confirmed"].label = label
 
     def clean_document(self):
         uploaded = self.cleaned_data["document"]

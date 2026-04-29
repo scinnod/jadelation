@@ -78,21 +78,14 @@ def app_settings(request):
     # Replace {year} placeholder with current year
     footer_text = settings.FOOTER_TEXT.replace('{year}', str(datetime.now().year))
 
-    # Resolve document-translation feature flag (True / False / "beta")
-    doc_trans = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
-    if doc_trans is True:
-        doc_trans_enabled = True
-    elif doc_trans == "beta":
-        key = request.session.get('beta_key', '')
-        if key and key in getattr(settings, 'BETA_KEYS', []):
-            doc_trans_enabled = True
-        else:
-            if key:
-                # Key was revoked – clean up the session.
-                request.session.pop('beta_key', None)
-            doc_trans_enabled = False
-    else:
+    # Resolve document-translation feature flag (False / True / regex string)
+    val = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
+    if val is False:
         doc_trans_enabled = False
+    elif val is True:
+        doc_trans_enabled = True
+    else:  # regex string — check session flag set by DocumentTranslationsMiddleware
+        doc_trans_enabled = bool(request.session.get('document_translations', False))
 
     return {
         'APP_TITLE': app_title,
@@ -106,5 +99,4 @@ def app_settings(request):
         'MAX_TRANSLATION_LENGTH': getattr(settings, 'MAX_TRANSLATION_LENGTH', 0),
         'MAX_DOCUMENT_SIZE_MB': getattr(settings, 'MAX_DOCUMENT_SIZE_MB', 50),
         'DOCUMENT_TRANSLATION_ENABLED': doc_trans_enabled,
-        'BETA_MODE': doc_trans == "beta" and doc_trans_enabled,
     }

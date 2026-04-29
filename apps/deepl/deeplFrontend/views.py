@@ -11,7 +11,6 @@ import os
 import re
 import threading
 import time
-import unicodedata
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
@@ -46,96 +45,34 @@ DEEPL_MODEL_TYPE_TRANSLATION = getattr(settings, 'DEEPL_MODEL_TYPE_TRANSLATION',
 # The cache is refreshed lazily on the next translation request after expiry.
 GLOSSARY_CACHE_TTL = getattr(settings, 'GLOSSARY_CACHE_TTL', 3600)
 
-# Beta feature-flag keys
-BETA_KEYS = getattr(settings, 'BETA_KEYS', [])
-BETA_KEY_MIN_LENGTH = getattr(settings, 'BETA_KEY_MIN_LENGTH', 20)
-
-
 # ---------------------------------------------------------------------------
-# Beta feature helpers
+# Document translation feature helpers
 # ---------------------------------------------------------------------------
-
-def _slugify_for_beta(text):
-    """Normalise *text* for beta-key comparison.
-
-    Decomposes Unicode, strips non-ASCII diacritics, lowercases, and
-    removes everything except ASCII letters and digits.
-    """
-    text = unicodedata.normalize('NFKD', text)
-    text = text.encode('ascii', 'ignore').decode('ascii')
-    text = text.lower()
-    return re.sub(r'[^a-z0-9]', '', text)
-
-
-def _check_beta_activation(request, source_text):
-    """Activate beta mode if *source_text* matches a configured beta key.
-
-    Comparison is done on slugified strings (case-insensitive, no spaces
-    or punctuation).  Keys shorter than ``BETA_KEY_MIN_LENGTH`` are
-    silently ignored.
-
-    The stored session key is re-validated against the current
-    ``BETA_KEYS`` list on every call so that removed keys take effect
-    immediately.
-
-    Returns ``True`` when beta mode was **just activated** (the caller
-    should skip translation for that request).  Returns ``False`` in all
-    other cases (no match, already in valid beta, key revoked, etc.).
-    """
-    beta_keys = getattr(settings, 'BETA_KEYS', [])
-    min_length = getattr(settings, 'BETA_KEY_MIN_LENGTH', 20)
-
-    # Re-validate an existing session key against the current list.
-    existing_key = request.session.get('beta_key')
-    if existing_key:
-        if existing_key in beta_keys:
-            return False  # still valid – not a new activation
-        # Key was revoked; clear and fall through to check the text.
-        request.session.pop('beta_key', None)
-
-    if not beta_keys:
-        return False
-    slugified_search = _slugify_for_beta(source_text)
-    for key in beta_keys:
-        if len(key) < min_length:
-            continue
-        if slugified_search == _slugify_for_beta(key):
-            request.session['beta_key'] = key
-            return True  # newly activated
-    return False
-
 
 def _is_doc_translation_possible():
-    """Return ``True`` when document translation *might* be used.
+    """Return ``True`` when document translation *might* be used by someone.
 
     Used for infrastructure tasks (cleanup) that should run whenever the
-    setting is ``True`` *or* ``"beta"``.
+    feature is ``True`` or a regex string (i.e. not entirely disabled).
     """
     val = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
-    return val is True or val == "beta"
+    return val is not False
 
 
 def _is_doc_translation_enabled(request):
     """Return ``True`` when document translation is enabled for *request*.
 
-    Resolves the tri-state setting (``True`` / ``False`` / ``"beta"``)
-    by checking the user's session for an active beta key.  The stored
-    key is re-validated against the current ``BETA_KEYS`` list so that
-    removed keys lose access immediately.
+    Resolves the tri-state ``DOCUMENT_TRANSLATION_ENABLED`` setting:
+    - ``False``  → always disabled
+    - ``True``   → always enabled
+    - str (regex)→ enabled only when the middleware set the session flag
     """
     val = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
+    if val is False:
+        return False
     if val is True:
         return True
-    if val == "beta":
-        key = request.session.get('beta_key')
-        if not key:
-            return False
-        if key in getattr(settings, 'BETA_KEYS', []):
-            return True
-        # Key was revoked – clear session.
-        request.session.pop('beta_key', None)
-        return False
-    return False
+    return bool(request.session.get('document_translations', False))
 
 
 class _GlossaryCache:
@@ -336,18 +273,6 @@ def deepl_translation(request):
     if request.method == "POST":
         form = TranslationForm(request.POST)
         if form.is_valid():
-            # Check whether the source text activates beta mode.
-            # When beta is *just* activated, skip the translation so the
-            # key phrase is never sent to DeepL.
-            if _check_beta_activation(request, form.cleaned_data["sourceText"]):
-                return render(
-                    request,
-                    "translation_frontend.html",
-                    {"form": TranslationForm(initial={"directionChoice": "auto"}),
-                     "doc_form": DocumentTranslationForm(),
-                     **_active_job_context(request)},
-                )
-
             # Initial values of variables
             character_count = 0
             auto_detection = False
@@ -1254,16 +1179,3 @@ def deepl_document_download(request, job_id):
     job.save(update_fields=["downloaded", "download_count"])
 
     return response
-
-
-# ---------------------------------------------------------------------------
-# Beta mode deactivation
-# ---------------------------------------------------------------------------
-
-@require_POST
-def deactivate_beta(request):
-    """Remove the beta key from the session, deactivating beta mode."""
-    if 'beta_key' in request.session:
-        del request.session['beta_key']
-    from django.shortcuts import redirect
-    return redirect('translation-form')

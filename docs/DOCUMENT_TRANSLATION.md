@@ -17,61 +17,67 @@ Set the following in your environment file (`env/deepl.env`):
 DOCUMENT_TRANSLATION_ENABLED=True
 ```
 
-When disabled (the default), the translation page shows only the text translation form. When enabled, a tabbed interface appears with **Text Translation** and **Document Translation (Beta)** tabs.
+When disabled (the default), the translation page shows only the text translation form. When enabled, a tabbed interface appears with **Text Translation** and **Document Translation** tabs.
 
-### Beta Mode (Easter Egg)
+### Email-Based Access Control
 
-Instead of enabling document translation for everyone, you can gate it
-behind an "easter egg" activation phrase:
+Instead of enabling document translation for everyone, you can restrict access
+to users whose email address matches a regular expression.  The email is read
+from the `X-Remote-Email` HTTP header, which is set by
+[oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) after
+authentication via Keycloak (or another OIDC provider).
+
+Set `DOCUMENT_TRANSLATION_ENABLED` to any string that is not `True`, `False`,
+`true`, `false`, `1`, `0`, `yes`, or `no` and it is treated as a
+case-insensitive regular expression:
 
 ```bash
-DOCUMENT_TRANSLATION_ENABLED=beta
-BETA_KEYS=please activate beta features now
-```
+# All @university.org addresses
+DOCUMENT_TRANSLATION_ENABLED=@university\.org$
 
-With this configuration, the document translation tab stays hidden until a
-user types one of the configured key phrases into the **text translation**
-field and submits it.  The phrase is compared in a *slugified* form
-(case-insensitive, all spaces and punctuation removed), so `Please,
-Activate Beta-Features… Now!` matches `please activate beta features now`.
+# @university.org PLUS two specific individuals
+DOCUMENT_TRANSLATION_ENABLED=@university\.org$|^john\.doe@email\.test$|^anotherone@somemail\.example$
+
+# Everyone (any valid email address contains @)
+DOCUMENT_TRANSLATION_ENABLED=@
+```
 
 **How it works:**
 
-1. A user types a beta key as translation source text and submits.
-2. The server recognises the key phrase, **skips the translation** (the
-   phrase is never sent to DeepL), and activates beta mode for the session.
-3. The page reloads with the document translation tab visible and a blue
-   **beta bar** at the top of the page.
-4. The user can deactivate beta mode at any time via the "Deactivate"
-   button in the beta bar.
-5. The stored session key is **re-validated** against the current
-   `BETA_KEYS` list on every request.  If an administrator removes a key
-   from the list, all users who activated with that key are revoked
-   immediately.
+1. On every request `DocumentTranslationsMiddleware` reads `X-Remote-Email`.
+2. If the email matches the regex, `request.session['document_translations']`
+   is set to `True`.
+3. If the email does *not* match, the session flag is removed.
+4. Views and the context processor read the session flag to decide whether to
+   show the document translation tab or accept document uploads.
 
-**Safety measures:**
-
-- Each key must be at least `BETA_KEY_MIN_LENGTH` characters long (default:
-  20).  Shorter keys in the list are silently ignored.  This prevents
-  accidental activation through normal translation text.
-- Only an **exact** slugified match activates beta — partial matches or
-  superstrings do not trigger it.
-- Multiple comma-separated keys are supported:
-  ```bash
-  BETA_KEYS=please activate beta features now,another secret phrase here
-  ```
+**Security note:** The `X-Remote-Email` header is set by oauth2-proxy *after*
+authentication and must not be trusted when the application is accessed
+directly (not through the nginx/oauth2-proxy stack).  The middleware only
+grants access — it does not perform authentication itself.
 
 ## Fair Use Confirmation
 
-Before uploading, users must tick a **confirmation checkbox** affirming that the translation is needed for study, teaching, research, or administrative purposes at Jade University, and that the service – which is funded by Jade University – is being used accordingly.
+Before uploading, users must tick a **confirmation checkbox** affirming that the translation is needed for an acceptable purpose (e.g. study, teaching, research, or administration). Below the checkbox a note reminds users that translation costs are charged per document and that the service should be used responsibly.
 
 The checkbox is:
 
 - **Unchecked by default** on every page load and after each "Translate another document" reset.
 - **Required** – the submit button remains disabled until it is checked (enforced client-side via JavaScript, and server-side via a required `BooleanField` validated by Django).
-- Styled with an informational note reminding users that this is a free service provided by the university.
 
-This is a soft awareness measure, not an access restriction.  Its purpose is to encourage responsible use and to make users conscious of the institutional costs of document translation, especially for large files.
+This is a soft awareness measure, not an access restriction.  Its purpose is to encourage responsible use and to make users conscious that each document translation incurs costs.
+
+### Customising the checkbox text
+
+The label of the confirmation checkbox is read from the environment at startup and can be tailored to your organisation's acceptable-use policy.  Set one variable per supported language using the `_<LANG>` suffix convention (uppercase ISO 639-1 code):
+
+```bash
+# env/deepl.env
+DOCUMENT_TRANSLATION_FAIR_USE_TEXT_EN=I confirm that I need this translation for a purpose in the context of study, teaching, research, or administration at Example University.
+DOCUMENT_TRANSLATION_FAIR_USE_TEXT_DE=Ich bestätige, dass ich diese Übersetzung für einen Zweck im Kontext von Studium, Lehre, Forschung oder Verwaltung an der Beispiel Universität benötige.
+```
+
+When these variables are not set, the application uses generic fallback texts that do not mention a specific institution.
 
 > **Security note:** The checkbox is a `BooleanField(required=True)` in `DocumentTranslationForm`.  Django's form validation raises a `ValidationError` when the field is missing or `False`, so the server-side check is independent of the client-side JavaScript.
 
@@ -159,9 +165,7 @@ editing history, not intentional formatting differences.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DOCUMENT_TRANSLATION_ENABLED` | `False` | `True` – visible to all, `False` – hidden, `beta` – visible only after easter-egg activation |
-| `BETA_KEYS` | *(empty)* | Comma-separated list of activation phrases for beta mode (min 20 chars each) |
-| `BETA_KEY_MIN_LENGTH` | `20` | Minimum character length for each beta key; shorter keys are silently ignored |
+| `DOCUMENT_TRANSLATION_ENABLED` | `False` | `True` – visible to all; `False` – hidden; regex string – visible only to users whose `X-Remote-Email` matches the pattern (case-insensitive) |
 | `DOCUMENT_TRANSLATION_TIMEOUT` | `180` | Maximum wall-clock seconds for a single document translation (0 = unlimited) |
 | `MAX_TRANSLATION_LENGTH` | `0` | Maximum characters allowed per document (0 = unlimited).  Before translation begins a pre-flight check counts the characters in the uploaded document; if the count exceeds this limit the job fails immediately. |
 
