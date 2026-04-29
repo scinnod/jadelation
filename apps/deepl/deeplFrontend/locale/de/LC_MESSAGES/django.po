@@ -341,8 +341,8 @@ msgstr ""
 "Gemischte Zeichenformatierungen (z.B. einzelne fett oder kursiv formatierte "
 "Wörter) innerhalb eines Absatzes werden möglicherweise nicht beibehalten."
 
-msgid "Translation costs are charged per document. Please use this service responsibly."
-msgstr "Die Übersetzungskosten werden pro Dokument berechnet. Bitte nutzen Sie diesen Dienst verantwortungsvoll."
+msgid "Document translation incurs costs that are covered centrally. Please use this service responsibly."
+msgstr "Für die Übersetzung von Dokumenten fallen Kosten an, die zentral getragen werden. Nutzen Sie diesen Dienst deshalb bitte verantwortungsvoll."
 
 msgid "Please check the formatting of the translated document before use."
 msgstr "Bitte überprüfen Sie die Formatierung des übersetzten Dokuments vor der Verwendung."
