@@ -82,10 +82,17 @@ def app_settings(request):
     val = getattr(settings, 'DOCUMENT_TRANSLATION_ENABLED', False)
     if val is False:
         doc_trans_enabled = False
+        doc_notice = ""
     elif val is True:
         doc_trans_enabled = True
+        doc_notice = ""  # everyone has access — no notice needed
     else:  # regex string — check session flag set by DocumentTranslationsMiddleware
         doc_trans_enabled = bool(request.session.get('document_translations', False))
+        # Only show notice to users who actually have access in regex mode
+        if doc_trans_enabled:
+            doc_notice = _get_localised(getattr(settings, 'DOCUMENT_TRANSLATION_NOTICE', {}))
+        else:
+            doc_notice = ""
 
     return {
         'APP_TITLE': app_title,
@@ -99,4 +106,5 @@ def app_settings(request):
         'MAX_TRANSLATION_LENGTH': getattr(settings, 'MAX_TRANSLATION_LENGTH', 0),
         'MAX_DOCUMENT_SIZE_MB': getattr(settings, 'MAX_DOCUMENT_SIZE_MB', 50),
         'DOCUMENT_TRANSLATION_ENABLED': doc_trans_enabled,
+        'DOCUMENT_TRANSLATION_NOTICE': doc_notice,
     }

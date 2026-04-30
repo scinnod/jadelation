@@ -1007,6 +1007,15 @@ class SettingsTest(TestCase):
         self.assertIsInstance(settings.MAX_TRANSLATION_LENGTH, int)
         self.assertGreaterEqual(settings.MAX_TRANSLATION_LENGTH, 0)
 
+    def test_document_translation_notice_is_dict(self):
+        """Test that DOCUMENT_TRANSLATION_NOTICE is a dict with language keys."""
+        self.assertIsInstance(settings.DOCUMENT_TRANSLATION_NOTICE, dict)
+        self.assertIn("en", settings.DOCUMENT_TRANSLATION_NOTICE)
+        self.assertIn("de", settings.DOCUMENT_TRANSLATION_NOTICE)
+        # Both defaults must be non-empty (they serve as sensible fallbacks)
+        self.assertTrue(settings.DOCUMENT_TRANSLATION_NOTICE["en"])
+        self.assertTrue(settings.DOCUMENT_TRANSLATION_NOTICE["de"])
+
 
 # ============================================================================
 # Context Processor Tests
@@ -1085,6 +1094,53 @@ class ContextProcessorTest(TestCase):
         response = self.client.get(reverse("translation-form"), HTTP_ACCEPT_LANGUAGE="de")
         # The title should be one of the configured values
         self.assertIn(response.context["APP_TITLE"], ["Test Title EN", "Test Titel DE"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_document_translation_notice_absent_when_enabled_for_all(self):
+        """DOCUMENT_TRANSLATION_NOTICE must be empty when feature is on for everyone."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_document_translation_notice_absent_when_disabled(self):
+        """DOCUMENT_TRANSLATION_NOTICE must be empty when feature is off."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED="@",
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Restricted notice", "de": "Eingeschränkter Hinweis"},
+    )
+    def test_document_translation_notice_shown_in_regex_mode_with_access(self):
+        """Notice is shown to users who have access in regex mode."""
+        # Simulate middleware granting access
+        session = self.client.session
+        session["document_translations"] = True
+        session.save()
+        response = self.client.get(reverse("translation-form"))
+        self.assertIn(response.context["DOCUMENT_TRANSLATION_NOTICE"], ["Restricted notice", "Eingeschränkter Hinweis"])
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED="@",
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Restricted notice", "de": "Eingeschränkter Hinweis"},
+    )
+    def test_document_translation_notice_absent_in_regex_mode_without_access(self):
+        """Notice is NOT shown to users who do not have access in regex mode."""
+        # No session flag — user not granted access
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED="@",
+        DOCUMENT_TRANSLATION_NOTICE={"en": "", "de": ""},
+    )
+    def test_document_translation_notice_suppressed_when_empty_string(self):
+        """Notice is suppressed when the operator sets it to an empty string."""
+        session = self.client.session
+        session["document_translations"] = True
+        session.save()
+        response = self.client.get(reverse("translation-form"))
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
 
 
 # ============================================================================
@@ -1568,6 +1624,37 @@ class DocumentTranslationViewGetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "translationTabs")
         self.assertContains(response, "document-pane")
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_notice_banner_absent_when_enabled_for_all(self):
+        """Info notice must not appear in the HTML when the feature is on for everyone."""
+        response = self.client.get(reverse("translation-form"))
+        # Context value must be empty; no notice markup in page
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
+        self.assertNotContains(response, "Beta pilot notice")
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED="@",
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Beta pilot notice"},
+    )
+    def test_notice_banner_rendered_for_regex_access_user(self):
+        """Info notice must appear in the HTML for a user who has regex-mode access."""
+        session = self.client.session
+        session["document_translations"] = True
+        session.save()
+        response = self.client.get(reverse("translation-form"))
+        self.assertContains(response, "Beta pilot notice")
+        self.assertContains(response, "alert-info")
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED="@",
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Beta pilot notice"},
+    )
+    def test_notice_banner_absent_for_regex_no_access_user(self):
+        """Info banner must NOT appear for a user who does not have regex-mode access."""
+        # No session flag — feature tab is hidden, no banner either
+        response = self.client.get(reverse("translation-form"))
+        self.assertNotContains(response, "Beta pilot notice")
 
     @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
     def test_tabs_hidden_when_disabled(self):

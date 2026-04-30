@@ -67,6 +67,37 @@ The checkbox is:
 
 This is a soft awareness measure, not an access restriction.  Its purpose is to encourage responsible use and to make users conscious that each document translation incurs costs.
 
+### Access Notice Banner
+
+When `DOCUMENT_TRANSLATION_ENABLED` is set to a **regex string**, an informational
+banner is automatically shown **only to users who have access** (i.e. whose email
+matched the regex).  The banner is never shown when the feature is globally
+enabled (`True`) or disabled (`False`).
+
+The banner text is language-aware and uses the same `_<LANG>` suffix convention
+as other branding settings.  Built-in defaults are provided so no configuration
+is needed for a typical regex-mode deployment:
+
+| Language | Default text |
+|---|---|
+| EN | *Document translation may not be available to all users.* |
+| DE | *Die Dokumentübersetzung ist möglicherweise nicht für alle Nutzer verfügbar.* |
+
+To **customise** the text, set the env vars in `env/deepl.env`:
+
+```bash
+DOCUMENT_TRANSLATION_NOTICE_EN=Document translation is currently in a restricted pilot phase.
+DOCUMENT_TRANSLATION_NOTICE_DE=Die Dokumentübersetzung befindet sich derzeit in einer eingeschränkten Pilotphase.
+```
+
+To **suppress** the banner entirely even in regex mode, set the value to an
+empty string:
+
+```bash
+DOCUMENT_TRANSLATION_NOTICE_EN=
+DOCUMENT_TRANSLATION_NOTICE_DE=
+```
+
 ### Customising the checkbox text
 
 The label of the confirmation checkbox is read from the environment at startup and can be tailored to your organisation's acceptable-use policy.  Set one variable per supported language using the `_<LANG>` suffix convention (uppercase ISO 639-1 code):

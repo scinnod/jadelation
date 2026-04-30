@@ -160,6 +160,16 @@ DOCUMENT_TRANSLATION_FAIR_USE_TEXT = _collect_i18n_env("DOCUMENT_TRANSLATION_FAI
     ),
 })
 
+# Optional info banner shown above the translation tabs when document translation
+# is restricted to a subset of users via a regex filter.  The banner is shown
+# ONLY in regex mode and ONLY to users who have access — never when the feature
+# is globally on (True) or off (False).  Set to empty string to suppress it.
+# Same language-suffix convention as APP_TITLE: DOCUMENT_TRANSLATION_NOTICE_EN, _DE, …
+DOCUMENT_TRANSLATION_NOTICE = _collect_i18n_env("DOCUMENT_TRANSLATION_NOTICE", {
+    "en": "Document translation may not be available to all users.",
+    "de": "Die Dokumentübersetzung ist möglicherweise nicht für alle Nutzer verfügbar.",
+})
+
 # Maximum document upload size in megabytes.  Files exceeding this limit are
 # rejected both client-side (JavaScript) and server-side (form validation).
 # Note: values above 50 MB may require matching updates to client_max_body_size
