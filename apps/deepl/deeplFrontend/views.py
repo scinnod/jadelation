@@ -20,7 +20,7 @@ from django.db.models import Count, F, Sum
 from django.http import HttpResponse, FileResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
-from django.utils.translation import gettext as _
+from django.utils.translation import gettext as _, get_language, activate
 from django.views.decorators.http import require_POST, require_GET
 
 from .forms import TranslationForm, DocumentTranslationForm
@@ -860,7 +860,7 @@ def _doc_upload_dir():
 # Background translation worker
 # ---------------------------------------------------------------------------
 
-def _run_translation_job(job_id):
+def _run_translation_job(job_id, language=None):
     """Execute the translation in a background thread.
 
     Reads the uploaded file from disk, translates it, and updates the
@@ -868,6 +868,8 @@ def _run_translation_job(job_id):
     """
     import django
     django.db.connections.close_all()
+    if language:
+        activate(language)
 
     try:
         job = DocumentTranslationJob.objects.get(pk=job_id)
@@ -1096,6 +1098,7 @@ def deepl_document_translation(request):
     thread = threading.Thread(
         target=_run_translation_job,
         args=(job.id,),
+        kwargs={"language": get_language()},
         daemon=True,
     )
     thread.start()
