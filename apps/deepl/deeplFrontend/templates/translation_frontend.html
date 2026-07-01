@@ -19,14 +19,6 @@
   </div>
 
   {% if DOCUMENT_TRANSLATION_ENABLED %}
-  {% if DOCUMENT_TRANSLATION_NOTICE %}
-  <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="alert">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-info-circle-fill flex-shrink-0" viewBox="0 0 16 16">
-      <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2"/>
-    </svg>
-    <small>{{ DOCUMENT_TRANSLATION_NOTICE }}</small>
-  </div>
-  {% endif %}
   {# ── Tabbed interface (text + document) ── #}
   <ul class="nav nav-tabs mb-4" id="translationTabs" role="tablist">
     <li class="nav-item" role="presentation">
@@ -48,7 +40,6 @@
           <path d="M9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5zm0 1v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
         </svg>
         {% translate "Document Translation" %}
-        <span class="badge rounded-pill text-bg-secondary ms-1" style="font-size: 0.65em; vertical-align: middle;">beta</span>
         <span id="doc-tab-dot" class="d-none" aria-label="{% translate 'action required' %}"></span>
       </button>
     </li>
@@ -114,6 +105,14 @@
     {# ── Tab 2: Document translation ── #}
     <div class="tab-pane fade {% if active_tab == 'document' %}show active{% endif %}" id="document-pane" role="tabpanel" aria-labelledby="document-tab">
 
+      {% if DOCUMENT_TRANSLATION_NOTICE %}
+      <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-info-circle-fill flex-shrink-0" viewBox="0 0 16 16">
+          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2"/>
+        </svg>
+        <small>{{ DOCUMENT_TRANSLATION_NOTICE }}</small>
+      </div>
+      {% endif %}
       <div class="row">
         <div class="col-12 col-lg-8">
           <div class="card border-0 shadow-sm">

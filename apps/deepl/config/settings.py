@@ -132,7 +132,7 @@ MAX_TRANSLATION_LENGTH = int(os.getenv("MAX_TRANSLATION_LENGTH", "0"))
 # When enabled, an additional tab is shown on the translation page that allows
 # users to upload .docx or .pptx files for in-place translation.  The document
 # structure and formatting are preserved; only text fragments are translated.
-# Allowed values: True / False / "beta"
+# Allowed values: True / False / <regex>
 #   True    – feature visible to all users
 #   False   – feature hidden (default)
 #   <regex> – visible only to users whose X-Remote-Email matches the regex

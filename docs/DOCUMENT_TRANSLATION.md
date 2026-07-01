@@ -3,11 +3,9 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sciences
 -->
 
-# Document Translation (Beta)
+# Document Translation
 
 The document translation feature allows users to upload Word (`.docx`) or PowerPoint (`.pptx`) files and receive a translated version with the original formatting and structure preserved.
-
-> **Note:** This feature is currently in **Beta**. The tab heading in the UI displays a "beta" badge.
 
 ## Enabling the Feature
 

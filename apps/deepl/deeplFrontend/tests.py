@@ -1631,11 +1631,11 @@ class DocumentTranslationViewGetTest(TestCase):
         response = self.client.get(reverse("translation-form"))
         # Context value must be empty; no notice markup in page
         self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
-        self.assertNotContains(response, "Beta pilot notice")
+        self.assertNotContains(response, "Doc translation notice")
 
     @override_settings(
         DOCUMENT_TRANSLATION_ENABLED="@",
-        DOCUMENT_TRANSLATION_NOTICE={"en": "Beta pilot notice"},
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Doc translation notice"},
     )
     def test_notice_banner_rendered_for_regex_access_user(self):
         """Info notice must appear in the HTML for a user who has regex-mode access."""
@@ -1643,18 +1643,18 @@ class DocumentTranslationViewGetTest(TestCase):
         session["document_translations"] = True
         session.save()
         response = self.client.get(reverse("translation-form"))
-        self.assertContains(response, "Beta pilot notice")
+        self.assertContains(response, "Doc translation notice")
         self.assertContains(response, "alert-info")
 
     @override_settings(
         DOCUMENT_TRANSLATION_ENABLED="@",
-        DOCUMENT_TRANSLATION_NOTICE={"en": "Beta pilot notice"},
+        DOCUMENT_TRANSLATION_NOTICE={"en": "Doc translation notice"},
     )
     def test_notice_banner_absent_for_regex_no_access_user(self):
         """Info banner must NOT appear for a user who does not have regex-mode access."""
         # No session flag — feature tab is hidden, no banner either
         response = self.client.get(reverse("translation-form"))
-        self.assertNotContains(response, "Beta pilot notice")
+        self.assertNotContains(response, "Doc translation notice")
 
     @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
     def test_tabs_hidden_when_disabled(self):
