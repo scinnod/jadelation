@@ -7,7 +7,7 @@ A privacy-focused web interface for the DeepL translation API, designed for inst
 
 > ⚠️ **IMPORTANT SECURITY WARNING**
 > 
-> This service provides **unrestricted access to your DeepL API key**. Every translation request uses your API quota and incurs costs.
+> This service provides **unrestricted access to the DeepL API via your API key**. Every translation request uses your API quota and incurs costs.
 > 
 > **NEVER expose this service to the public internet without authentication!**
 > 

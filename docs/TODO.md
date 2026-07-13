@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sc
 
 ## ⚠️ Critical Security Reminder
 
-**This service provides unrestricted access to your DeepL API key and MUST be deployed behind authentication.**
+**This service provides unrestricted access to the DeepL API via your API key and MUST be deployed behind authentication.**
 
 Every translation uses your API quota and incurs costs. See [SECURITY.md](../SECURITY.md) for details.
 
