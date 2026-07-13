@@ -219,6 +219,12 @@ python-pptx~=1.0.0
 
 These are installed automatically when building the Docker image.
 
+## Statistics Integration
+
+Document translations are recorded in the same `Translation` database table as text translations, with the `is_document_translation` flag set to `True`.  This means they are included in the standard usage statistics (request count and character usage) without any separate tracking.
+
+In addition, the statistics pages (`/stat/d`, `/stat/m`, `/stat/y`) display a **whereof documents** column showing, for each period, how many translations were document translations and what share of all translations they represent (e.g. `3 (25%)`).  This column is shown only to users who are eligible to use document translation — it is hidden for users without access or when the feature is globally disabled.
+
 ## Troubleshooting
 
 ### "Document translation is not enabled"

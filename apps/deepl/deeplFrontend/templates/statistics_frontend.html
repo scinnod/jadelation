@@ -14,11 +14,33 @@
     <h1 class="display-6 pb-2"><a href="{% url 'translation-form' %}" style="text-decoration: none; color: inherit;">{{ APP_TITLE }}</a> &#150; {% translate "Statistics" %}</h1>
   </div>
 
+  {# Granularity navigation pills #}
+  {% translate "daily" as t_daily %}
+  {% translate "monthly" as t_monthly %}
+  {% translate "annually" as t_annually %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item">
+      <a class="nav-link{% if granularity == 'd' %} active{% endif %}"
+         href="{% url 'usage-statistics' granularity='d' %}">{{ t_daily|capfirst }}</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link{% if granularity == 'm' %} active{% endif %}"
+         href="{% url 'usage-statistics' granularity='m' %}">{{ t_monthly|capfirst }}</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link{% if granularity == 'y' %} active{% endif %}"
+         href="{% url 'usage-statistics' granularity='y' %}">{{ t_annually|capfirst }}</a>
+    </li>
+  </ul>
+
   {# Statistics table section #}
   {% if granularity_title %}
     <h5>{{ granularity_title }}</h5>
     <div class="text-secondary">
       {% translate "Legend: <em>number of requests</em> (<em>number of characters used</em>)" %}
+      {% if DOCUMENT_TRANSLATION_ENABLED %}
+        &mdash; {% translate "whereof documents: count (share of total)" %}
+      {% endif %}
     </div>
   {% endif %}
 
@@ -28,9 +50,12 @@
       <thead>
         <tr>
           <th scope="col">{% translate "period" %}</th>
-          <th scope="col">DE->EN</th>
-          <th scope="col">EN->DE</th>
-          <th scope="col">{% translate "total" %}</th>
+          <th scope="col" class="text-end">DE&rarr;EN</th>
+          <th scope="col" class="text-end">EN&rarr;DE</th>
+          <th scope="col" class="text-end">{% translate "total" %}</th>
+          {% if DOCUMENT_TRANSLATION_ENABLED %}
+          <th scope="col" class="text-end">{% translate "whereof documents" %}</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody class="table-group-divider">
@@ -38,9 +63,12 @@
         {% for r in statistics %}
           <tr>
             <td>{{ r.fdt|date:dformat }}</td>
-            <td>{{ r.deen }}</td>
-            <td>{{ r.ende }}</td>
-            <td>{{ r.total }}</td>
+            <td class="text-end">{{ r.deen }}</td>
+            <td class="text-end">{{ r.ende }}</td>
+            <td class="text-end">{{ r.total }}</td>
+            {% if DOCUMENT_TRANSLATION_ENABLED %}
+            <td class="text-end text-secondary">{{ r.doc }}</td>
+            {% endif %}
           </tr>
         {% endfor %}
       </tbody>

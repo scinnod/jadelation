@@ -9,6 +9,67 @@
 {% load static %}
 {% load custom_helper_tags %}
 
+{# Page-specific styles injected into <head> via the extra_styles block so   #}
+{# they are applied before first paint and prevent a flash of unstyled content.#}
+{% block extra_styles %}
+{% if MAX_TRANSLATION_LENGTH > 0 %}
+<style>
+  #submit-btn:disabled {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #fff !important;
+    opacity: 0.45;
+  }
+</style>
+{% endif %}
+{% if DOCUMENT_TRANSLATION_ENABLED %}
+<style>
+  #translationTabs .nav-link {
+    color: #6c757d;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.6rem 1.2rem;
+    font-weight: 500;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  #translationTabs .nav-link:hover {
+    color: var(--primary-color);
+    border-bottom-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+  }
+  #translationTabs .nav-link.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    background: transparent;
+  }
+  /* Document submit button – corporate identity colours */
+  #doc-submit-btn {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #fff !important;
+  }
+  #doc-submit-btn:disabled {
+    opacity: 0.45;
+  }
+  /* Activity indicator dot on document tab */
+  #doc-tab-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  /* Download button – corporate identity colours */
+  #doc-download-btn {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #fff !important;
+  }
+</style>
+{% endif %}
+{% endblock extra_styles %}
+
 {% block content %}
   {# Header section #}
   <div>
@@ -273,14 +334,6 @@
 
   {% if MAX_TRANSLATION_LENGTH > 0 %}
   {# Character limit enforcement #}
-  <style>
-    #submit-btn:disabled {
-      background-color: var(--primary-color) !important;
-      border-color: var(--primary-color) !important;
-      color: #fff !important;
-      opacity: 0.45;
-    }
-  </style>
   <script>
     (function () {
       var maxLen = {{ MAX_TRANSLATION_LENGTH }};
@@ -520,50 +573,5 @@
       {% endif %}
     });
   </script>
-  {# Tab + button styling to match corporate identity #}
-  <style>
-    #translationTabs .nav-link {
-      color: #6c757d;
-      border: none;
-      border-bottom: 2px solid transparent;
-      padding: 0.6rem 1.2rem;
-      font-weight: 500;
-      transition: color 0.15s ease, border-color 0.15s ease;
-    }
-    #translationTabs .nav-link:hover {
-      color: var(--primary-color);
-      border-bottom-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
-    }
-    #translationTabs .nav-link.active {
-      color: var(--primary-color);
-      border-bottom-color: var(--primary-color);
-      background: transparent;
-    }
-    /* Document submit button – corporate identity colours */
-    #doc-submit-btn {
-      background-color: var(--primary-color) !important;
-      border-color: var(--primary-color) !important;
-      color: #fff !important;
-    }
-    #doc-submit-btn:disabled {
-      opacity: 0.45;
-    }
-    /* Activity indicator dot on document tab */
-    #doc-tab-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: var(--primary-color);
-      margin-left: 6px;
-      vertical-align: middle;
-    }
-    /* Download button – corporate identity colours */
-    #doc-download-btn {
-      background-color: var(--primary-color) !important;
-      border-color: var(--primary-color) !important;
-      color: #fff !important;
-    }
-  </style>
   {% endif %}
 {% endblock scripts %}

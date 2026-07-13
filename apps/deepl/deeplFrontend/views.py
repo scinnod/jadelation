@@ -495,6 +495,20 @@ def deepl_daily_statistics(request, granularity):
             timestamp__lt=tdt
         ).aggregate(cumul=Sum("characters"), events=Count("characters"))
 
+        req_doc = Translation.objects.filter(
+            timestamp__gte=fdt,
+            timestamp__lt=tdt,
+            is_document_translation=True,
+        ).aggregate(events=Count("id"))
+
+        total_events = req["events"] or 0
+        doc_events = req_doc["events"] or 0
+        if total_events and doc_events:
+            doc_pct = round(doc_events / total_events * 100)
+            doc_str = "{} ({}%)".format(doc_events, doc_pct)
+        else:
+            doc_str = str(doc_events)
+
         statistics.append(
             {
                 "fdt": fdt,
@@ -511,6 +525,7 @@ def deepl_daily_statistics(request, granularity):
                     req_ende["events"], 
                     req_ende["cumul"] if req_ende["cumul"] else 0
                 ),
+                "doc": doc_str,
             }
         )
 

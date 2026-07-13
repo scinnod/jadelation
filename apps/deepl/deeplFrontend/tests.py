@@ -886,6 +886,203 @@ class StatisticsViewTest(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_statistics_doc_key_present_in_context(self, mock_translator_cls):
+        """Test that each statistics period dict contains the 'doc' key."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        statistics = response.context["statistics"]
+        self.assertTrue(len(statistics) > 0)
+        for period in statistics:
+            self.assertIn("doc", period, "Each period dict must contain a 'doc' key")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_statistics_doc_percentage_formatting(self, mock_translator_cls):
+        """Test doc column shows 'N (X%)' format when document translations exist."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        # Add one document translation to the 4 already created in setUp (3+1=4 text).
+        # Total for today: 5 translations, 1 is a document → 20 %.
+        Translation.objects.create(
+            characters=300,
+            direction="DE->EN-GB|",
+            auto_detection=False,
+            is_document_translation=True,
+        )
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        # The first period in the daily view covers today and must contain our records.
+        today_period = response.context["statistics"][0]
+        # 5 total, 1 doc → "1 (20%)"
+        self.assertEqual(today_period["doc"], "1 (20%)")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_statistics_doc_zero_formatting(self, mock_translator_cls):
+        """Test doc column shows '0' when no document translations exist."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        # All setUp translations have is_document_translation=False (default).
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        today_period = response.context["statistics"][0]
+        self.assertEqual(today_period["doc"], "0")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_statistics_doc_column_visible_when_enabled(self, mock_translator_cls):
+        """Test that the doc column header is rendered when doc translation is enabled."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "whereof documents")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
+    def test_statistics_doc_column_hidden_when_disabled(self, mock_translator_cls):
+        """Test that the doc column is absent when doc translation is disabled."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "whereof documents")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_statistics_granularity_nav_present(self, mock_translator_cls):
+        """Test that the granularity navigation pills are rendered on the statistics page."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'nav-pills')
+        # Active pill must reflect current granularity
+        self.assertContains(response, 'nav-link active')
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_statistics_doc_column_renders_data_cells(self, mock_translator_cls):
+        """Test that doc column <td> values are rendered when doc translation is enabled."""
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        # One doc translation exists (from setUp's 4 text translations + this one).
+        Translation.objects.create(
+            characters=150,
+            direction="DE->EN-GB|",
+            auto_detection=False,
+            is_document_translation=True,
+        )
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        # The formatted doc value for today must appear somewhere in the rendered table.
+        today_period = response.context["statistics"][0]
+        self.assertIn("(", today_period["doc"], "Doc value should contain a percentage")
+        self.assertContains(response, today_period["doc"])
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED="@eligible\\.example$")
+    def test_statistics_doc_column_visible_for_regex_eligible_user(self, mock_translator_cls):
+        """Test doc column visible when setting is a regex and the user's session flag is set.
+
+        This covers the tri-state 'specific user' eligibility path used in production
+        deployments where DOCUMENT_TRANSLATION_ENABLED is an email-matching regex.
+        """
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        # Simulate the session flag that DocumentTranslationsMiddleware sets for
+        # users whose email matches the regex.
+        session = self.client.session
+        session["document_translations"] = True
+        session.save()
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "whereof documents")
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED="@eligible\\.example$")
+    def test_statistics_doc_column_hidden_for_regex_ineligible_user(self, mock_translator_cls):
+        """Test doc column hidden when setting is a regex but the user has no session flag.
+
+        Covers the case where another user on the same instance does NOT have access.
+        """
+        mock_translator = MagicMock()
+        mock_translator_cls.return_value = mock_translator
+        mock_usage = MagicMock()
+        mock_usage.character.count = 0
+        mock_usage.character.limit = 500000
+        mock_translator.get_usage.return_value = mock_usage
+
+        # Ensure no session flag is present (ineligible user).
+        session = self.client.session
+        session.pop("document_translations", None)
+        session.save()
+
+        response = self.client.get(
+            reverse("usage-statistics", kwargs={"granularity": "d"})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "whereof documents")
+
 
 # ============================================================================
 # Template Tag Tests

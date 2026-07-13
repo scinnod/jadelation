@@ -97,7 +97,23 @@
       .table-hover tbody tr:hover {
         background-color: color-mix(in srgb, var(--primary-color) 5%, white);
       }
+
+      /* Corporate color for active nav pill */
+      .nav-pills .nav-link.active {
+        background-color: var(--primary-color);
+        color: #fff !important;  /* beats the generic 'a' color rule (higher specificity) */
+      }
+      .nav-pills .nav-link:not(.active) {
+        color: var(--primary-color);
+      }
+      .nav-pills .nav-link:not(.active):hover {
+        background-color: color-mix(in srgb, var(--primary-color) 10%, white);
+      }
     </style>
+    
+    {# Per-page styles block — child templates inject page-specific CSS here so #}
+    {# it lands in <head> before first paint, not at the bottom of <body>.      #}
+    {% block extra_styles %}{% endblock extra_styles %}
   </head>
 
   <body>

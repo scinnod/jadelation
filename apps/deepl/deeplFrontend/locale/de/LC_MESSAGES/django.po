@@ -246,6 +246,12 @@ msgstr "insgesamt"
 msgid "back to translation frontend"
 msgstr "zurück zur Übersetzungsmaske"
 
+msgid "whereof documents"
+msgstr "davon Dokumente"
+
+msgid "whereof documents: count (share of total)"
+msgstr "davon Dokumente: Anzahl (Anteil gesamt)"
+
 msgid "Enterprise DeepL API access with enhanced privacy."
 msgstr "Enterprise DeepL API-Zugang mit verbessertem Datenschutz."
 

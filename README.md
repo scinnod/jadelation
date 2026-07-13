@@ -94,6 +94,7 @@ SSO_LOGOUT_URL=https://auth.example.com/realms/myrealm/protocol/openid-connect/l
 - Daily, monthly, and yearly usage reports
 - Request count and character usage tracking
 - Language direction breakdown (DE→EN, EN→DE)
+- Document translation share shown per period (visible only to users eligible for document translation)
 - API quota monitoring
 
 ### Glossary Management
