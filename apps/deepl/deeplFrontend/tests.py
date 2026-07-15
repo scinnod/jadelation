@@ -1213,6 +1213,46 @@ class SettingsTest(TestCase):
         self.assertTrue(settings.DOCUMENT_TRANSLATION_NOTICE["en"])
         self.assertTrue(settings.DOCUMENT_TRANSLATION_NOTICE["de"])
 
+    def test_collect_i18n_env_false_sentinel_clears_default(self):
+        """_collect_i18n_env: setting a language variant to 'False' removes the default."""
+        from config.settings import _collect_i18n_env
+        import unittest.mock as mock
+        env = {"MY_SETTING_EN": "False", "MY_SETTING_DE": "Hallo"}
+        with mock.patch.dict("os.environ", env, clear=False):
+            result = _collect_i18n_env("MY_SETTING", {"en": "Hello", "de": "Hallo"})
+        self.assertNotIn("en", result)
+        self.assertIn("de", result)
+
+    def test_collect_i18n_env_false_case_insensitive(self):
+        """_collect_i18n_env: 'FALSE', 'false', 'False' all clear the default."""
+        from config.settings import _collect_i18n_env
+        import unittest.mock as mock
+        for variant in ("FALSE", "false", "False", "fAlSe"):
+            with self.subTest(variant=variant):
+                env = {"MY_SETTING_EN": variant}
+                with mock.patch.dict("os.environ", env, clear=False):
+                    result = _collect_i18n_env("MY_SETTING", {"en": "Hello"})
+                self.assertNotIn("en", result, f"Expected 'en' to be cleared for variant '{variant}'")
+
+    def test_collect_i18n_env_all_false_produces_empty_dict(self):
+        """_collect_i18n_env: setting all language variants to 'False' yields {}."""
+        from config.settings import _collect_i18n_env
+        import unittest.mock as mock
+        env = {"MY_SETTING_EN": "False", "MY_SETTING_DE": "False"}
+        with mock.patch.dict("os.environ", env, clear=False):
+            result = _collect_i18n_env("MY_SETTING", {"en": "Hello", "de": "Hallo"})
+        self.assertEqual(result, {})
+
+    def test_collect_i18n_env_empty_string_still_ignored(self):
+        """_collect_i18n_env: empty-string env vars are still silently ignored."""
+        from config.settings import _collect_i18n_env
+        import unittest.mock as mock
+        env = {"MY_SETTING_EN": ""}
+        with mock.patch.dict("os.environ", env, clear=False):
+            result = _collect_i18n_env("MY_SETTING", {"en": "Hello"})
+        # Empty string must NOT clear the default (use "False" for that)
+        self.assertEqual(result.get("en"), "Hello")
+
 
 # ============================================================================
 # Context Processor Tests
@@ -1338,6 +1378,26 @@ class ContextProcessorTest(TestCase):
         session.save()
         response = self.client.get(reverse("translation-form"))
         self.assertEqual(response.context["DOCUMENT_TRANSLATION_NOTICE"], "")
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED=True,
+        DOCUMENT_TRANSLATION_FAIR_USE_TEXT={"en": "Please confirm.", "de": "Bitte bestätigen."},
+    )
+    def test_fair_use_text_in_context_when_set(self):
+        """DOCUMENT_TRANSLATION_FAIR_USE_TEXT context var is non-empty when configured."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertIn("DOCUMENT_TRANSLATION_FAIR_USE_TEXT", response.context)
+        self.assertTrue(response.context["DOCUMENT_TRANSLATION_FAIR_USE_TEXT"])
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED=True,
+        DOCUMENT_TRANSLATION_FAIR_USE_TEXT={},
+    )
+    def test_fair_use_text_empty_in_context_when_not_set(self):
+        """DOCUMENT_TRANSLATION_FAIR_USE_TEXT context var is empty string when dict is {}."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertIn("DOCUMENT_TRANSLATION_FAIR_USE_TEXT", response.context)
+        self.assertEqual(response.context["DOCUMENT_TRANSLATION_FAIR_USE_TEXT"], "")
 
 
 # ============================================================================
@@ -1790,6 +1850,32 @@ class DocumentTranslationFormTest(TestCase):
         form = DocumentTranslationForm()
         self.assertTrue(form.fields["document"].required)
 
+    def test_document_widget_accept_attr(self):
+        """document field widget must carry an accept attribute covering .docx and .pptx."""
+        form = DocumentTranslationForm()
+        accept = form.fields["document"].widget.attrs.get("accept", "")
+        self.assertIn(".docx", accept)
+        self.assertIn(".pptx", accept)
+
+    def test_fair_use_field_required_by_default(self):
+        """fair_use_confirmed field is required when text is configured."""
+        form = DocumentTranslationForm()
+        self.assertTrue(form.fields["fair_use_confirmed"].required)
+
+    @override_settings(DOCUMENT_TRANSLATION_FAIR_USE_TEXT={})
+    def test_fair_use_form_valid_when_text_empty_and_on_submitted(self):
+        """When DOCUMENT_TRANSLATION_FAIR_USE_TEXT is empty the hidden input
+        sends 'on', which satisfies BooleanField(required=True)."""
+        docx = SimpleUploadedFile("test.docx", _make_docx_bytes())
+        form = DocumentTranslationForm(
+            data={
+                "directionChoice": "DE->EN-GB|",
+                "fair_use_confirmed": "on",
+            },
+            files={"document": docx},
+        )
+        self.assertTrue(form.is_valid())
+
 
 # ============================================================================
 # Document Translation URL Tests
@@ -1867,6 +1953,26 @@ class DocumentTranslationViewGetTest(TestCase):
         response = self.client.get(reverse("translation-form"))
         self.assertIn("doc_form", response.context)
         self.assertIsInstance(response.context["doc_form"], DocumentTranslationForm)
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED=True,
+        DOCUMENT_TRANSLATION_FAIR_USE_TEXT={"en": "I confirm.", "de": "Ich bestätige."},
+    )
+    def test_fair_use_checkbox_rendered_when_text_configured(self):
+        """Visible checkbox is rendered when fair-use text is non-empty."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertContains(response, 'id="id_fair_use_confirmed"')
+        self.assertNotContains(response, 'type="hidden" name="fair_use_confirmed"')
+
+    @override_settings(
+        DOCUMENT_TRANSLATION_ENABLED=True,
+        DOCUMENT_TRANSLATION_FAIR_USE_TEXT={},
+    )
+    def test_fair_use_hidden_input_rendered_when_text_empty(self):
+        """Hidden input is rendered instead of checkbox when fair-use text is empty."""
+        response = self.client.get(reverse("translation-form"))
+        self.assertContains(response, 'type="hidden" name="fair_use_confirmed" value="on"')
+        self.assertNotContains(response, 'id="id_fair_use_confirmed"')
 
     @override_settings(DOCUMENT_TRANSLATION_ENABLED=False)
     def test_get_document_url_returns_405_when_disabled(self):

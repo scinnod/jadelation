@@ -65,6 +65,14 @@ def _collect_i18n_env(prefix, defaults=None):
     Scans for ``<PREFIX>_<LANG>`` env vars (e.g. ``APP_TITLE_EN``,
     ``APP_TITLE_DE``).  *defaults* is an optional dict of fallback values
     that is used when the corresponding env var is not set.
+
+    Setting a language variant to the literal string ``"False"`` (any
+    capitalisation, e.g. ``APP_TITLE_EN=False``) removes that language
+    from the result, effectively clearing any built-in default for it.
+    When all language variants are cleared the returned dict is empty
+    ``{}``.  This is used by ``DOCUMENT_TRANSLATION_FAIR_USE_TEXT`` and
+    ``DOCUMENT_TRANSLATION_NOTICE`` to let operators suppress the
+    fair-use checkbox or the access-notice banner via the env file.
     """
     result = {}
     if defaults is None:
@@ -74,9 +82,14 @@ def _collect_i18n_env(prefix, defaults=None):
         result[lang.lower()] = value
     # 2. Override / extend from environment
     for key, value in os.environ.items():
-        if key.startswith(prefix + "_") and value:
+        if key.startswith(prefix + "_"):
             lang_code = key[len(prefix) + 1:].lower()  # APP_TITLE_EN -> "en"
-            if lang_code:  # ignore bare APP_TITLE_ without language
+            if not lang_code:  # ignore bare APP_TITLE_ without language
+                continue
+            if value.strip().lower() == "false":
+                # Explicit "False" clears any default for this language
+                result.pop(lang_code, None)
+            elif value:
                 result[lang_code] = value
     return result
 
@@ -149,6 +162,13 @@ else:
 # (and other language variants) in the env file to customise the checkbox label shown
 # above the document upload form.  The text typically states the acceptable-use
 # conditions specific to your organisation.
+# To disable the fair-use checkbox entirely (e.g. for an internal-only deployment
+# where no confirmation is required), set all language variants to the literal
+# string "False" (any capitalisation):
+#   DOCUMENT_TRANSLATION_FAIR_USE_TEXT_EN=False
+#   DOCUMENT_TRANSLATION_FAIR_USE_TEXT_DE=False
+# This clears the built-in defaults and produces an empty dict, which tells the
+# template to hide the checkbox and pre-confirm the upload automatically.
 DOCUMENT_TRANSLATION_FAIR_USE_TEXT = _collect_i18n_env("DOCUMENT_TRANSLATION_FAIR_USE_TEXT", {
     "en": (
         "I confirm that I need this translation for a purpose in the context "
@@ -163,8 +183,12 @@ DOCUMENT_TRANSLATION_FAIR_USE_TEXT = _collect_i18n_env("DOCUMENT_TRANSLATION_FAI
 # Optional info banner shown above the translation tabs when document translation
 # is restricted to a subset of users via a regex filter.  The banner is shown
 # ONLY in regex mode and ONLY to users who have access — never when the feature
-# is globally on (True) or off (False).  Set to empty string to suppress it.
+# is globally on (True) or off (False).
 # Same language-suffix convention as APP_TITLE: DOCUMENT_TRANSLATION_NOTICE_EN, _DE, …
+# To suppress the banner even in regex mode, set all language variants to the
+# literal string "False" (any capitalisation):
+#   DOCUMENT_TRANSLATION_NOTICE_EN=False
+#   DOCUMENT_TRANSLATION_NOTICE_DE=False
 DOCUMENT_TRANSLATION_NOTICE = _collect_i18n_env("DOCUMENT_TRANSLATION_NOTICE", {
     "en": "Document translation may not be available to all users.",
     "de": "Die Dokumentübersetzung ist möglicherweise nicht für alle Nutzer verfügbar.",

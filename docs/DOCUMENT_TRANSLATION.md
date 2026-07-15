@@ -65,6 +65,19 @@ The checkbox is:
 
 This is a soft awareness measure, not an access restriction.  Its purpose is to encourage responsible use and to make users conscious that each document translation incurs costs.
 
+### Disabling the fair-use checkbox
+
+If no confirmation is required (e.g. for an internal-only deployment where all users are authorised), the checkbox can be suppressed by setting **all** language variants to the literal string `False` (any capitalisation) in the env file:
+
+```bash
+DOCUMENT_TRANSLATION_FAIR_USE_TEXT_EN=False
+DOCUMENT_TRANSLATION_FAIR_USE_TEXT_DE=False
+```
+
+When all language variants are cleared the checkbox disappears from the upload form and the backend receives an automatic confirmation via a hidden input (`<input type="hidden" name="fair_use_confirmed" value="on">`).  Django's `BooleanField(required=True)` accepts this value as `True`, so no backend changes are needed and no new security surface is introduced.
+
+> **Note:** Empty-string values (`DOCUMENT_TRANSLATION_FAIR_USE_TEXT_EN=`) are **not** treated as a disable signal — only the literal string `False` (any capitalisation) removes a language variant.  You must clear **every** configured language (default: `EN` and `DE`) to suppress the checkbox entirely; leaving any language set means the fallback chain in the context processor will still find a non-empty text and show the checkbox.
+
 ### Access Notice Banner
 
 When `DOCUMENT_TRANSLATION_ENABLED` is set to a **regex string**, an informational
@@ -88,13 +101,18 @@ DOCUMENT_TRANSLATION_NOTICE_EN=Document translation is currently in a restricted
 DOCUMENT_TRANSLATION_NOTICE_DE=Die Dokumentübersetzung befindet sich derzeit in einer eingeschränkten Pilotphase.
 ```
 
-To **suppress** the banner entirely even in regex mode, set the value to an
-empty string:
+To **suppress** the banner entirely even in regex mode, set all language
+variants to the literal string `False` (any capitalisation):
 
 ```bash
-DOCUMENT_TRANSLATION_NOTICE_EN=
-DOCUMENT_TRANSLATION_NOTICE_DE=
+DOCUMENT_TRANSLATION_NOTICE_EN=False
+DOCUMENT_TRANSLATION_NOTICE_DE=False
 ```
+
+The same `False` sentinel works for all `_collect_i18n_env`-backed settings:
+it removes the built-in default for that language, and when every language is
+cleared the resulting dict is empty, which the context processor treats as "no
+text configured".
 
 ### Customising the checkbox text
 
@@ -109,6 +127,12 @@ DOCUMENT_TRANSLATION_FAIR_USE_TEXT_DE=Ich bestätige, dass ich diese Übersetzun
 When these variables are not set, the application uses generic fallback texts that do not mention a specific institution.
 
 > **Security note:** The checkbox is a `BooleanField(required=True)` in `DocumentTranslationForm`.  Django's form validation raises a `ValidationError` when the field is missing or `False`, so the server-side check is independent of the client-side JavaScript.
+
+## File picker pre-filtering
+
+The document upload field sets the HTML `accept` attribute to `.docx`, `.pptx`, and their corresponding MIME types.  The OS file dialog therefore defaults to showing only Word and PowerPoint files.  Users can switch to "All files" at any time — any file type that is not `.docx` or `.pptx` will be rejected by client-side JavaScript and server-side form validation independently.
+
+File extension matching is **case-insensitive** throughout the stack: `.DOCX`, `.Docx`, `.pptx`, and `.PPTX` are all accepted by both the client-side validator and the server-side `clean_document` method.
 
 ## How It Works
 

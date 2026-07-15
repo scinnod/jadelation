@@ -60,6 +60,21 @@ class DocumentTranslationForm(forms.Form):
         required=True,
         label=_("Document (.docx or .pptx)"),
         help_text=_("Upload a Word or PowerPoint file. The document structure and formatting will be preserved as far as possible."),
+        widget=forms.ClearableFileInput(attrs={
+            # Pre-filter the OS file picker to supported types.
+            # File extension matching in accept is case-insensitive per the HTML spec,
+            # so .docx covers .DOCX, .Docx, etc.  Including MIME types additionally
+            # covers systems that identify files by type rather than extension.
+            # Users can always switch the dialog to "All files" — unsupported types
+            # are still rejected by client-side JS and server-side form validation.
+            "accept": (
+                ".docx,.pptx,"
+                "application/vnd.openxmlformats-officedocument"
+                ".wordprocessingml.document,"
+                "application/vnd.openxmlformats-officedocument"
+                ".presentationml.presentation"
+            ),
+        }),
     )
 
     fair_use_confirmed = forms.BooleanField(

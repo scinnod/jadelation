@@ -107,4 +107,9 @@ def app_settings(request):
         'MAX_DOCUMENT_SIZE_MB': getattr(settings, 'MAX_DOCUMENT_SIZE_MB', 50),
         'DOCUMENT_TRANSLATION_ENABLED': doc_trans_enabled,
         'DOCUMENT_TRANSLATION_NOTICE': doc_notice,
+        # Resolved fair-use text for the current language (empty string when the
+        # operator has cleared all language variants → template hides the checkbox).
+        'DOCUMENT_TRANSLATION_FAIR_USE_TEXT': _get_localised(
+            getattr(settings, 'DOCUMENT_TRANSLATION_FAIR_USE_TEXT', {})
+        ),
     }
