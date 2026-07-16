@@ -260,6 +260,11 @@
                   <button id="doc-new-btn" class="btn btn-outline-secondary btn-sm ms-2" type="button">
                     {% translate "Translate another document" %}
                   </button>
+                  {# Shown only when the source document contained footnotes or endnotes #}
+                  <div id="doc-footnote-warning" class="alert alert-warning py-2 px-3 mt-3 mb-0 small d-none" role="alert">
+                    <strong>{% translate "Note" %}:</strong>
+                    {% blocktranslate %}This document contains footnotes or endnotes. Please verify their positions in the translated document — the paragraph-level translation approach may not have preserved the exact placement of every footnote or endnote marker.{% endblocktranslate %}
+                  </div>
                 </div>
               </div>
 
@@ -412,6 +417,7 @@
         $('#doc-upload-form')[0].reset();
         currentJobId = null;
         $('#doc-tab-dot').addClass('d-none');
+        $('#doc-footnote-warning').addClass('d-none');
         // reset() unchecks the checkbox – reflect that in button state
         updateDocSubmitState();
       }
@@ -511,6 +517,9 @@
                 $('#res-duration').text(data.duration_seconds.toFixed(1) + ' s');
                 var dlUrl = downloadUrlTemplate.replace('00000000-0000-0000-0000-000000000000', currentJobId);
                 $('#doc-download-btn').attr('href', dlUrl);
+                if (data.has_footnotes) {
+                  $('#doc-footnote-warning').removeClass('d-none');
+                }
                 showSection('result');
                 $('#doc-tab-dot').removeClass('d-none');
               } else if (data.status === 'failed') {
@@ -571,6 +580,9 @@
           $('#res-duration').text(job.duration_seconds.toFixed(1) + ' s');
           var dlUrl = downloadUrlTemplate.replace('00000000-0000-0000-0000-000000000000', job.id);
           $('#doc-download-btn').attr('href', dlUrl);
+          if (job.has_footnotes) {
+            $('#doc-footnote-warning').removeClass('d-none');
+          }
           showSection('result');
           $('#doc-tab-dot').removeClass('d-none');
         } else if (job.status === 'failed') {

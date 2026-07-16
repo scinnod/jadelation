@@ -2374,7 +2374,7 @@ class TranslateDocxHelperTest(TestCase):
             doc.add_paragraph("Hallo Welt")
             doc.save(path)
 
-            char_count, api_calls = _translate_docx(
+            char_count, api_calls, _ = _translate_docx(
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
 
@@ -2423,10 +2423,9 @@ class TranslateDocxHelperTest(TestCase):
             doc.add_paragraph("   ")  # whitespace only
             doc.save(path)
 
-            char_count, api_calls = _translate_docx(
+            char_count, api_calls, _ = _translate_docx(
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
-
             self.assertEqual(char_count, 0)
             self.assertEqual(api_calls, 0)
             mock_translator.translate_text.assert_not_called()
@@ -2515,7 +2514,7 @@ class TranslateDocxHelperTest(TestCase):
             para.add_run(" DE")   # 3 chars
             doc.save(path)
 
-            char_count, api_calls = _translate_docx(
+            char_count, api_calls, _ = _translate_docx(
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
             self.assertEqual(char_count, 6)
@@ -2545,13 +2544,330 @@ class TranslateDocxHelperTest(TestCase):
             doc.add_section()
             doc.save(path)
 
-            char_count, api_calls = _translate_docx(
+            char_count, api_calls, _ = _translate_docx(
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
             # Body (4) + Header (6) + Footer (6) = 16 chars, 3 API calls
             # The linked second section should NOT add extra calls
             self.assertEqual(api_calls, 3)
             self.assertEqual(char_count, 16)
+
+    # -----------------------------------------------------------------------
+    # Helpers for footnote / endnote tests
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _make_docx_with_notes_bytes(body_text, note_text, note_type="footnote"):
+        """Return bytes of a .docx containing one user footnote or endnote.
+
+        The note content is built by directly injecting the appropriate
+        word/footnotes.xml (or word/endnotes.xml) part into the ZIP, because
+        python-docx 1.1.x has no high-level API for creating footnotes.
+        """
+        import io
+        import zipfile as zipfile_mod
+        from docx import Document as DocxDocument
+
+        buf = io.BytesIO()
+        doc = DocxDocument()
+        doc.add_paragraph(body_text)
+        doc.save(buf)
+        buf.seek(0)
+
+        rel_type = (
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+            + ("footnotes" if note_type == "footnote" else "endnotes")
+        )
+        xml_file = "word/" + ("footnotes" if note_type == "footnote" else "endnotes") + ".xml"
+        root_tag = "w:footnotes" if note_type == "footnote" else "w:endnotes"
+        note_tag = "w:footnote" if note_type == "footnote" else "w:endnote"
+        ref_tag = "w:footnoteRef" if note_type == "footnote" else "w:endnoteRef"
+
+        notes_xml = (
+            "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"
+            "<{root} xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+            "<{note} w:type=\"separator\" w:id=\"-1\">"
+            "<w:p><w:r><w:separator/></w:r></w:p>"
+            "</{note}>"
+            "<{note} w:type=\"continuationSeparator\" w:id=\"0\">"
+            "<w:p><w:r><w:continuationSeparator/></w:r></w:p>"
+            "</{note}>"
+            "<{note} w:id=\"1\">"
+            "<w:p>"
+            "<w:r><w:rPr><w:rStyle w:val=\"FootnoteReference\"/></w:rPr><{ref}/></w:r>"
+            "<w:r><w:t>{text}</w:t></w:r>"
+            "</w:p>"
+            "</{note}>"
+            "</{root}>"
+        ).format(
+            root=root_tag, note=note_tag, ref=ref_tag, text=note_text
+        ).encode("utf-8")
+
+        result = io.BytesIO()
+        with zipfile_mod.ZipFile(buf, "r") as src, \
+                zipfile_mod.ZipFile(result, "w", zipfile_mod.ZIP_DEFLATED) as dst:
+            for item in src.infolist():
+                data = src.read(item.filename)
+                if item.filename == "word/_rels/document.xml.rels":
+                    rel_entry = (
+                        '<Relationship Id="rId99"'
+                        ' Type="{rel_type}"'
+                        ' Target="{target}"/>'
+                    ).format(
+                        rel_type=rel_type,
+                        target=("footnotes.xml" if note_type == "footnote"
+                                else "endnotes.xml"),
+                    ).encode("utf-8")
+                    data = data.replace(b"</Relationships>",
+                                        rel_entry + b"</Relationships>")
+                dst.writestr(item, data)
+            dst.writestr(xml_file, notes_xml)
+
+        result.seek(0)
+        return result.getvalue()
+
+    # -----------------------------------------------------------------------
+    # P1: footnote / endnote reference mark preservation
+    # -----------------------------------------------------------------------
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_footnote_reference_mark_preserved(self, mock_translator_cls):
+        """A <w:footnoteReference> run must survive translation (P1 fix).
+
+        python-docx's run.text setter calls CT_R.clear_content() which removes
+        ALL non-rPr child elements.  Runs that carry no visible text (such as
+        footnote reference mark runs) must therefore be skipped when clearing
+        the multi-run paragraph after translation.
+        """
+        from docx import Document as DocxDocument
+        from docx.oxml.parser import OxmlElement
+        from docx.oxml.ns import qn
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated text"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "fn_ref.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            para.add_run("Text before")
+            # Append a bare footnote-reference run (no <w:t>) directly to the
+            # paragraph XML — python-docx has no high-level API for this.
+            fn_run = OxmlElement("w:r")
+            fn_rpr = OxmlElement("w:rPr")
+            fn_rstyle = OxmlElement("w:rStyle")
+            fn_rstyle.set(qn("w:val"), "FootnoteReference")
+            fn_rpr.append(fn_rstyle)
+            fn_run.append(fn_rpr)
+            fn_ref = OxmlElement("w:footnoteReference")
+            fn_ref.set(qn("w:id"), "1")
+            fn_run.append(fn_ref)
+            para._p.append(fn_run)
+            para.add_run(" text after")
+            doc.save(path)
+
+            char_count, api_calls, has_notes = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+        result_doc = DocxDocument(path)
+        result_para = result_doc.paragraphs[0]
+
+        # The paragraph must contain translated text.
+        self.assertIn("Translated text", result_para.text)
+
+        # The <w:footnoteReference> element must still be present.
+        fn_refs = result_para._p.findall(".//" + qn("w:footnoteReference"))
+        self.assertEqual(
+            len(fn_refs), 1,
+            "<w:footnoteReference> was destroyed during translation",
+        )
+        self.assertEqual(fn_refs[0].get(qn("w:id")), "1")
+
+        # No footnotes OPC part → has_notes must be False.
+        self.assertFalse(has_notes)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_endnote_reference_mark_preserved(self, mock_translator_cls):
+        """A <w:endnoteReference> run must survive translation (P1 fix)."""
+        from docx import Document as DocxDocument
+        from docx.oxml.parser import OxmlElement
+        from docx.oxml.ns import qn
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "en_ref.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            para.add_run("Endnote text")
+            en_run = OxmlElement("w:r")
+            en_ref = OxmlElement("w:endnoteReference")
+            en_ref.set(qn("w:id"), "1")
+            en_run.append(en_ref)
+            para._p.append(en_run)
+            doc.save(path)
+
+            _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+        result_doc = DocxDocument(path)
+        result_para = result_doc.paragraphs[0]
+        en_refs = result_para._p.findall(".//" + qn("w:endnoteReference"))
+        self.assertEqual(
+            len(en_refs), 1,
+            "<w:endnoteReference> was destroyed during translation",
+        )
+
+    def test_footnote_ref_run_not_counted_in_chars(self):
+        """A footnote-reference run contributes 0 characters to the count."""
+        from docx import Document as DocxDocument
+        from docx.oxml.parser import OxmlElement
+        from docx.oxml.ns import qn
+        from .views import _translate_docx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ref_count.docx")
+            doc = DocxDocument()
+            para = doc.add_paragraph()
+            para.add_run("ABC")      # 3 chars
+            fn_run = OxmlElement("w:r")
+            fn_ref = OxmlElement("w:footnoteReference")
+            fn_ref.set(qn("w:id"), "1")
+            fn_run.append(fn_ref)
+            para._p.append(fn_run)  # 0 chars
+            doc.save(path)
+
+            char_count, api_calls, _ = _translate_docx(
+                path, MagicMock(), "DE", "EN-GB", None, None, None,
+                count_only=True,
+            )
+
+        self.assertEqual(char_count, 3)
+
+    # -----------------------------------------------------------------------
+    # P2: footnote / endnote content translation
+    # -----------------------------------------------------------------------
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_footnote_content_translated(self, mock_translator_cls):
+        """Footnote text content must be translated and saved back (P2 fix)."""
+        import zipfile as zipfile_mod
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx_bytes = self._make_docx_with_notes_bytes(
+            "Haupttext", "Fußnotentext", note_type="footnote",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "footnote.docx")
+            with open(path, "wb") as f:
+                f.write(docx_bytes)
+
+            char_count, api_calls, has_notes = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+        # has_notes must be True: user footnote was found.
+        self.assertTrue(has_notes)
+
+        # The API must have been called with the footnote text.
+        all_texts = [
+            call.args[0]
+            for call in mock_translator.translate_text.call_args_list
+        ]
+        self.assertIn("Fußnotentext", all_texts)
+
+        # The saved file must contain "Translated" inside footnotes.xml.
+        with zipfile_mod.ZipFile(path, "r") as z:
+            self.assertIn("word/footnotes.xml", z.namelist())
+            fn_xml = z.read("word/footnotes.xml").decode("utf-8")
+        self.assertIn("Translated", fn_xml)
+        self.assertNotIn("Fußnotentext", fn_xml)
+
+    @patch("deeplFrontend.views.deepl.Translator")
+    def test_endnote_content_translated(self, mock_translator_cls):
+        """Endnote text content must be translated and saved back (P2 fix)."""
+        import zipfile as zipfile_mod
+        from .views import _translate_docx
+
+        mock_translator = MagicMock()
+        mock_result = MagicMock()
+        mock_result.text = "Translated"
+        mock_translator.translate_text.return_value = mock_result
+
+        docx_bytes = self._make_docx_with_notes_bytes(
+            "Haupttext", "Endnotentext", note_type="endnote",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "endnote.docx")
+            with open(path, "wb") as f:
+                f.write(docx_bytes)
+
+            char_count, api_calls, has_notes = _translate_docx(
+                path, mock_translator, "DE", "EN-GB", None, None, None,
+            )
+
+        self.assertTrue(has_notes)
+        all_texts = [
+            call.args[0]
+            for call in mock_translator.translate_text.call_args_list
+        ]
+        self.assertIn("Endnotentext", all_texts)
+
+        with zipfile_mod.ZipFile(path, "r") as z:
+            self.assertIn("word/endnotes.xml", z.namelist())
+            en_xml = z.read("word/endnotes.xml").decode("utf-8")
+        self.assertIn("Translated", en_xml)
+        self.assertNotIn("Endnotentext", en_xml)
+
+    def test_count_only_includes_footnote_chars(self):
+        """count_only mode must count footnote text characters (P2 fix)."""
+        from .views import _count_chars_docx
+
+        # Body: "Hallo" (5), footnote: "Fußnotentext" (12) → total 17
+        docx_bytes = self._make_docx_with_notes_bytes(
+            "Hallo", "Fußnotentext", note_type="footnote",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "count_fn.docx")
+            with open(path, "wb") as f:
+                f.write(docx_bytes)
+
+            total = _count_chars_docx(path)
+
+        # Body paragraph "Hallo" = 5 chars; footnote "Fußnotentext" = 12 chars.
+        self.assertEqual(total, 17)
+
+    def test_has_notes_false_for_plain_docx(self):
+        """has_notes must be False when the document has no footnotes/endnotes."""
+        from docx import Document as DocxDocument
+        from .views import _translate_docx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "plain.docx")
+            doc = DocxDocument()
+            doc.add_paragraph("Some text")
+            doc.save(path)
+
+            _, _, has_notes = _translate_docx(
+                path, MagicMock(), "DE", "EN-GB", None, None, None,
+                count_only=True,
+            )
+
+        self.assertFalse(has_notes)
 
 
 class TranslatePptxHelperTest(TestCase):
@@ -2784,6 +3100,23 @@ class DocumentJobStatusEndpointTest(TestCase):
         self.assertEqual(data["characters"], 500)
         self.assertEqual(data["api_calls"], 10)
         self.assertEqual(data["duration_seconds"], 2.5)
+        self.assertIn("has_footnotes", data)
+        self.assertFalse(data["has_footnotes"])
+
+    @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
+    def test_completed_status_has_footnotes_true(self):
+        """Status endpoint must report has_footnotes=True when set on the job."""
+        job = self._create_job(
+            status=DocumentTranslationJob.Status.COMPLETED,
+            characters=100,
+            api_calls=2,
+            duration_seconds=1.0,
+            has_footnotes=True,
+        )
+        response = self.client.get(reverse("document-job-status", args=[job.id]))
+        data = response.json()
+        self.assertEqual(data["status"], "completed")
+        self.assertTrue(data["has_footnotes"])
 
     @override_settings(DOCUMENT_TRANSLATION_ENABLED=True)
     def test_failed_status_includes_error(self):

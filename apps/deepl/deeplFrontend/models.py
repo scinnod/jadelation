@@ -212,6 +212,17 @@ class DocumentTranslationJob(models.Model):
         verbose_name=_("Download count"),
     )
 
+    # Set to True for .docx jobs that contained at least one user footnote or
+    # endnote, so the UI can warn the user to verify footnote positions.
+    has_footnotes = models.BooleanField(
+        default=False,
+        verbose_name=_("Has footnotes or endnotes"),
+        help_text=_(
+            "True when the translated Word document contained footnotes or "
+            "endnotes.  Always False for PowerPoint jobs."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 

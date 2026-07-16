@@ -250,6 +250,7 @@ def _active_job_context(request):
             "characters": job.characters,
             "duration_seconds": job.duration_seconds,
             "file_size": job.file_size,
+            "has_footnotes": job.has_footnotes,
         })
     elif job.status == DocumentTranslationJob.Status.FAILED:
         data["error_message"] = job.error_message or ""
@@ -639,11 +640,12 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
                     count_only=False):
     """Translate all text in a .docx file **in-place**.
 
-    Paragraphs from the document body, headers, footers, and tables are
-    processed.  The full paragraph text is translated as a single unit
-    (giving the translator proper sentence context) and placed into the
-    first run.  Remaining runs are emptied so that the first run's
-    character formatting is applied to the whole translated text.
+    Paragraphs from the document body, headers, footers, tables, footnotes,
+    and endnotes are processed.  The full paragraph text is translated as a
+    single unit (giving the translator proper sentence context) and placed
+    into the first text-bearing run.  Runs that carry no text (e.g. runs
+    containing only a ``<w:footnoteReference>`` element) are left untouched
+    to preserve footnote/endnote reference marks in the body text.
 
     Word often splits visually identical text across many runs due to
     editing-history tracking (rsid attributes), spell-check state, etc.
@@ -656,7 +658,8 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
     pre-flight character-count check and guarantees the exact same
     traversal logic as the real translation pass.
 
-    Returns ``(char_count, api_calls)``.
+    Returns ``(char_count, api_calls, has_notes)`` where *has_notes* is
+    ``True`` if the document contains at least one user footnote or endnote.
     """
     from docx import Document
 
@@ -682,10 +685,20 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
             formality, glossary, model_type,
             deadline=deadline,
         )
-        # Place translated text in first run, clear the rest
-        runs[0].text = translated
-        for run in runs[1:]:
-            run.text = ""
+        # Place translated text in the first text-bearing run.
+        # Runs whose .text is empty (e.g. runs containing only a
+        # <w:footnoteReference> or <w:endnoteReference> element) must NOT
+        # be touched: python-docx's run.text setter calls CT_R.clear_content()
+        # which removes ALL child elements except w:rPr, permanently deleting
+        # special markup like footnote/endnote reference marks.
+        first_text_run_found = False
+        for run in runs:
+            if run.text:  # only touch runs that actually contributed text
+                if not first_text_run_found:
+                    run.text = translated
+                    first_text_run_found = True
+                else:
+                    run.text = ""
 
     # Body paragraphs
     for para in doc.paragraphs:
@@ -717,9 +730,41 @@ def _translate_docx(filepath, translator, source_lang, target_lang,
                     seen_elements.append(elem)  # prevent GC
                     process_paragraph(para)
 
+    # Footnotes and endnotes: count characters and (when not count_only) translate
+    # text content.  python-docx 1.1.x has no high-level API for these parts, so
+    # we access them as raw OPC blobs, parse with the registered custom XML parser
+    # (giving us proper CT_P / CT_R instances), apply process_paragraph(), then
+    # write the modified tree back to the part's blob so doc.save() picks it up.
+    from docx.opc.constants import RELATIONSHIP_TYPE as _RT
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml.parser import parse_xml as _parse_xml
+    from docx.opc.oxml import serialize_part_xml as _serialize_part_xml
+    from docx.text.paragraph import Paragraph as _DocxParagraph
+
+    has_notes = False
+    for _rel_type in (_RT.FOOTNOTES, _RT.ENDNOTES):
+        try:
+            _note_part = doc.part.part_related_by(_rel_type)
+        except KeyError:
+            continue  # this document has no footnotes / endnotes part
+        _note_root = _parse_xml(_note_part.blob)
+        _found_user_note = False
+        for _note_elem in _note_root:
+            _note_id = _note_elem.get(_qn('w:id'))
+            if _note_id in ('-1', '0', None):
+                continue  # skip separator / continuation notes (always present)
+            has_notes = True
+            _found_user_note = True
+            for _p_elem in _note_elem.findall(_qn('w:p')):
+                process_paragraph(_DocxParagraph(_p_elem, doc.part))
+        # Persist modifications: write the (possibly translated) tree back to the
+        # part's blob.  count_only mode must never modify the file on disk.
+        if not count_only and _found_user_note:
+            _note_part._blob = _serialize_part_xml(_note_root)
+
     if not count_only:
         doc.save(filepath)
-    return char_count, api_calls
+    return char_count, api_calls, has_notes
 
 
 def _translate_pptx(filepath, translator, source_lang, target_lang,
@@ -809,7 +854,7 @@ def _lang_suffix(target_lang):
 
 def _count_chars_docx(filepath):
     """Return the total character count of a .docx file (without translating)."""
-    char_count, _ = _translate_docx(
+    char_count, _, _ = _translate_docx(
         filepath, None, None, None, None, None, None, count_only=True,
     )
     return char_count
@@ -952,7 +997,7 @@ def _run_translation_job(job_id, language=None):
         model_type = DEEPL_MODEL_TYPE_TRANSLATION
 
         if job.file_type == ".docx":
-            char_count, api_calls = _translate_docx(
+            char_count, api_calls, has_notes = _translate_docx(
                 src_path, translator,
                 source_lang, target_lang,
                 formality, active_glossary, model_type,
@@ -965,6 +1010,7 @@ def _run_translation_job(job_id, language=None):
                 formality, active_glossary, model_type,
                 deadline=deadline,
             )
+            has_notes = False
 
         elapsed = time.monotonic() - start
 
@@ -982,11 +1028,12 @@ def _run_translation_job(job_id, language=None):
         job.characters = char_count
         job.api_calls = api_calls
         job.duration_seconds = round(elapsed, 2)
+        job.has_footnotes = has_notes
         job.status = DocumentTranslationJob.Status.COMPLETED
         job.completed_at = timezone.now()
         job.save(update_fields=[
             "characters", "api_calls", "duration_seconds",
-            "status", "completed_at",
+            "has_footnotes", "status", "completed_at",
         ])
 
     except TimeoutError:
@@ -1150,6 +1197,7 @@ def deepl_document_job_status(request, job_id):
             "duration_seconds": job.duration_seconds,
             "file_type": job.file_type,
             "file_size": job.file_size,
+            "has_footnotes": job.has_footnotes,
         })
     elif job.status == DocumentTranslationJob.Status.FAILED:
         data["error_message"] = job.error_message

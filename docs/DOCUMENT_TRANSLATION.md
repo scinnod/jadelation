@@ -169,6 +169,7 @@ All endpoints enforce **session-based access control**: only the session that cr
 - Body paragraphs
 - Table cell contents
 - Headers and footers
+- Footnote and endnote text content
 
 **PowerPoint presentations (.pptx):**
 - Text frames on all slides
@@ -181,6 +182,7 @@ All endpoints enforce **session-based access control**: only the session that cr
 - Document structure (headings, lists, tables, slide layouts)
 - Paragraph-level formatting (alignment, indentation, spacing)
 - The first run's character formatting (font, size, bold, italic, colour) is applied to the translated text
+- Footnote and endnote reference marks (superscript numbers) in the body text
 - Images, charts, and other embedded objects
 - Page/slide layout and margins
 
@@ -189,7 +191,23 @@ All endpoints enforce **session-based access control**: only the session that cr
 Text is translated **per paragraph**.  All runs (the smallest unit of
 consistently formatted text in Office documents) within a paragraph are
 concatenated into a single string, translated as one unit, and the result
-is placed into the first run while the remaining runs are emptied.
+is placed into the first *text-bearing* run.  Runs that carry no visible
+text — for example runs that contain only a footnote or endnote reference
+mark (`<w:footnoteReference>` / `<w:endnoteReference>`) — are left
+untouched so the reference marks survive in the body text.
+
+The text content of footnotes and endnotes is translated in the same
+way: each paragraph in every user footnote or endnote is processed
+identically to body paragraphs.
+
+> **Footnote/endnote marker position** — after translation, each reference
+> mark remains at its original *structural* position in the document XML
+> (after the run that preceded it).  If the translated sentence is
+> significantly shorter or longer than the original, the marker may
+> therefore appear at a slightly different word than intended.  When the
+> translated document contains footnotes or endnotes, the result card in
+> the web interface displays a note reminding the user to verify the
+> marker positions before use.
 
 Why not translate per run?
 
@@ -227,6 +245,7 @@ editing history, not intentional formatting differences.
 - Maximum file size: **50 MB**
 - Only `.docx` and `.pptx` formats are supported (not `.doc`, `.ppt`, `.pdf`, etc.)
 - Mixed character formatting within a single paragraph is not preserved (see *Translation Strategy* above).
+- Footnote and endnote reference markers remain at their original structural position; if translation changes the sentence length significantly, a marker may appear at a slightly different word.  The result card shows a reminder when a translated document had footnotes or endnotes.
 - The feature requires `python-docx` and `python-pptx` libraries (included in `requirements.txt`).
 - Translated files are stored on disk temporarily (up to 10 minutes); only the character count, direction, and job metadata are persisted in the database.
 - Auto-detection of the source language is not available for document translation; the user must select the direction explicitly.

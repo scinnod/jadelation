@@ -513,6 +513,19 @@ msgstr "Datei noch nicht bereit."
 msgid "File no longer available on the server."
 msgstr "Datei ist auf dem Server nicht mehr verfügbar."
 
+msgid "Note"
+msgstr "Hinweis"
+
+msgid ""
+"This document contains footnotes or endnotes. Please verify their positions "
+"in the translated document — the paragraph-level translation approach may "
+"not have preserved the exact placement of every footnote or endnote marker."
+msgstr ""
+"Dieses Dokument enthält Fuß- oder Endnoten. Bitte überprüfen Sie deren "
+"Positionen im übersetzten Dokument – der absatzweise Übersetzungsansatz "
+"hat möglicherweise nicht jede Fuß- oder Endnotenmarke an der genauen "
+"ursprünglichen Stelle erhalten."
+
 msgid "Deactivate"
 msgstr "Deaktivieren"
 
