@@ -2673,22 +2673,22 @@ class TranslateDocxHelperTest(TestCase):
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
 
-        result_doc = DocxDocument(path)
-        result_para = result_doc.paragraphs[0]
+            result_doc = DocxDocument(path)
+            result_para = result_doc.paragraphs[0]
 
-        # The paragraph must contain translated text.
-        self.assertIn("Translated text", result_para.text)
+            # The paragraph must contain translated text.
+            self.assertIn("Translated text", result_para.text)
 
-        # The <w:footnoteReference> element must still be present.
-        fn_refs = result_para._p.findall(".//" + qn("w:footnoteReference"))
-        self.assertEqual(
-            len(fn_refs), 1,
-            "<w:footnoteReference> was destroyed during translation",
-        )
-        self.assertEqual(fn_refs[0].get(qn("w:id")), "1")
+            # The <w:footnoteReference> element must still be present.
+            fn_refs = result_para._p.findall(".//" + qn("w:footnoteReference"))
+            self.assertEqual(
+                len(fn_refs), 1,
+                "<w:footnoteReference> was destroyed during translation",
+            )
+            self.assertEqual(fn_refs[0].get(qn("w:id")), "1")
 
-        # No footnotes OPC part → has_notes must be False.
-        self.assertFalse(has_notes)
+            # No footnotes OPC part → has_notes must be False.
+            self.assertFalse(has_notes)
 
     @patch("deeplFrontend.views.deepl.Translator")
     def test_endnote_reference_mark_preserved(self, mock_translator_cls):
@@ -2719,13 +2719,13 @@ class TranslateDocxHelperTest(TestCase):
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
 
-        result_doc = DocxDocument(path)
-        result_para = result_doc.paragraphs[0]
-        en_refs = result_para._p.findall(".//" + qn("w:endnoteReference"))
-        self.assertEqual(
-            len(en_refs), 1,
-            "<w:endnoteReference> was destroyed during translation",
-        )
+            result_doc = DocxDocument(path)
+            result_para = result_doc.paragraphs[0]
+            en_refs = result_para._p.findall(".//" + qn("w:endnoteReference"))
+            self.assertEqual(
+                len(en_refs), 1,
+                "<w:endnoteReference> was destroyed during translation",
+            )
 
     def test_footnote_ref_run_not_counted_in_chars(self):
         """A footnote-reference run contributes 0 characters to the count."""
@@ -2780,22 +2780,22 @@ class TranslateDocxHelperTest(TestCase):
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
 
-        # has_notes must be True: user footnote was found.
-        self.assertTrue(has_notes)
+            # has_notes must be True: user footnote was found.
+            self.assertTrue(has_notes)
 
-        # The API must have been called with the footnote text.
-        all_texts = [
-            call.args[0]
-            for call in mock_translator.translate_text.call_args_list
-        ]
-        self.assertIn("Fußnotentext", all_texts)
+            # The API must have been called with the footnote text.
+            all_texts = [
+                call.args[0]
+                for call in mock_translator.translate_text.call_args_list
+            ]
+            self.assertIn("Fußnotentext", all_texts)
 
-        # The saved file must contain "Translated" inside footnotes.xml.
-        with zipfile_mod.ZipFile(path, "r") as z:
-            self.assertIn("word/footnotes.xml", z.namelist())
-            fn_xml = z.read("word/footnotes.xml").decode("utf-8")
-        self.assertIn("Translated", fn_xml)
-        self.assertNotIn("Fußnotentext", fn_xml)
+            # The saved file must contain "Translated" inside footnotes.xml.
+            with zipfile_mod.ZipFile(path, "r") as z:
+                self.assertIn("word/footnotes.xml", z.namelist())
+                fn_xml = z.read("word/footnotes.xml").decode("utf-8")
+            self.assertIn("Translated", fn_xml)
+            self.assertNotIn("Fußnotentext", fn_xml)
 
     @patch("deeplFrontend.views.deepl.Translator")
     def test_endnote_content_translated(self, mock_translator_cls):
@@ -2820,18 +2820,18 @@ class TranslateDocxHelperTest(TestCase):
                 path, mock_translator, "DE", "EN-GB", None, None, None,
             )
 
-        self.assertTrue(has_notes)
-        all_texts = [
-            call.args[0]
-            for call in mock_translator.translate_text.call_args_list
-        ]
-        self.assertIn("Endnotentext", all_texts)
+            self.assertTrue(has_notes)
+            all_texts = [
+                call.args[0]
+                for call in mock_translator.translate_text.call_args_list
+            ]
+            self.assertIn("Endnotentext", all_texts)
 
-        with zipfile_mod.ZipFile(path, "r") as z:
-            self.assertIn("word/endnotes.xml", z.namelist())
-            en_xml = z.read("word/endnotes.xml").decode("utf-8")
-        self.assertIn("Translated", en_xml)
-        self.assertNotIn("Endnotentext", en_xml)
+            with zipfile_mod.ZipFile(path, "r") as z:
+                self.assertIn("word/endnotes.xml", z.namelist())
+                en_xml = z.read("word/endnotes.xml").decode("utf-8")
+            self.assertIn("Translated", en_xml)
+            self.assertNotIn("Endnotentext", en_xml)
 
     def test_count_only_includes_footnote_chars(self):
         """count_only mode must count footnote text characters (P2 fix)."""
