@@ -391,8 +391,7 @@
       var $formErrors = $('#doc-form-errors');
       var $submitBtn  = $('#doc-submit-btn');
 
-      // Build base URL for status/download from Django URL resolver
-      // We use a placeholder UUID and replace it with the actual job ID at runtime
+      // Build base URL for status/download using a placeholder UUID replaced at runtime
       var statusUrlTemplate = '{% url "document-job-status" "00000000-0000-0000-0000-000000000000" %}';
       var downloadUrlTemplate = '{% url "document-download" "00000000-0000-0000-0000-000000000000" %}';
 
