@@ -111,7 +111,7 @@ ORGANIZATION_NAME = _collect_i18n_env("ORGANIZATION_NAME", {
 })
 
 # Footer text (use {year} for current year placeholder)
-FOOTER_TEXT = os.getenv("FOOTER_TEXT", "{year}+ Translation Service")
+FOOTER_TEXT = os.getenv("FOOTER_TEXT", "&copy; {year} Translation Service")
 
 # Logo configuration
 LOGO_FILENAME = os.getenv("LOGO_FILENAME", "")  # Filename in static/logo/
@@ -287,6 +287,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Collapse blank lines produced by template tags in HTML responses.
+    "config.middleware.HtmlNormalizeWhitespaceMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

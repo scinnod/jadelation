@@ -43,3 +43,33 @@ class DocumentTranslationsMiddleware:
                     request.session.pop('document_translations', None)
 
         return self.get_response(request)
+
+
+class HtmlNormalizeWhitespaceMiddleware:
+    """Strip blank lines from HTML responses.
+
+    Django template rendering leaves many blank lines in the output because
+    template tags ({% block %}, {% if %}, etc.) each occupy their own line.
+    This middleware collapses every run of blank lines into nothing in a single
+    regex pass over the response body.
+
+    Only ``text/html`` responses are touched; JSON, static files and all other
+    content types pass through unchanged.
+
+    Note: blank lines inside ``<pre>`` or ``<textarea>`` tags are also removed.
+    This is acceptable here because those elements either have no default
+    content or their content is managed client-side via JavaScript.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        # Pre-compile the pattern once at startup, not per request.
+        self._blank_line_re = re.compile(r'\n\s*\n')
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if 'text/html' in response.get('Content-Type', ''):
+            text = response.content.decode(response.charset)
+            text = self._blank_line_re.sub('\n', text)
+            response.content = text.encode(response.charset)
+        return response
