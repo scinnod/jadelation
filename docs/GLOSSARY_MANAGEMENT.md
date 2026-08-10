@@ -13,7 +13,8 @@ Glossaries allow you to customize DeepL translations with domain-specific termin
 
 - `glossary_put` - Upload a new glossary
 - `glossary_list` - List all glossaries with full sync status (ACTIVE / SHADOWED / ORPHANED / UNTRACKED)
-- `glossary_remove` - Remove a glossary
+- `glossary_activate` - Promote a SHADOWED glossary to ACTIVE without re-uploading
+- `glossary_remove` - Remove a glossary from the local database (optionally also from DeepL)
 
 All glossaries are stored both in the DeepL API and in the local database for tracking purposes.
 
@@ -145,55 +146,86 @@ For each UNTRACKED glossary the command prompts:
 The `original_filename` field is set to `(imported from DeepL API)` since the
 original CSV file is not retrievable from the DeepL API.
 
-### 3. Remove a Glossary (glossary_remove)
+### 3. Activate a Glossary (glossary_activate)
 
-Remove a glossary from both DeepL API and the database.
+Promote a SHADOWED glossary to ACTIVE by touching its `upload_date` to the
+current time.  The application cache will then select it as the ACTIVE glossary
+for its language pair on the next refresh.
+
+Use this to:
+- Deliberately switch between two local copies of a glossary for the same pair
+- Revert an accidental promotion caused by importing an UNTRACKED entry
+
+The command verifies the glossary still exists in the DeepL API before making
+any change (it will refuse to activate an ORPHANED glossary).
 
 **Syntax:**
 ```bash
-python manage.py glossary_remove <name_or_id> [--force]
+python manage.py glossary_activate <name_or_id>
+```
+
+**Examples:**
+```bash
+python manage.py glossary_activate "AWI DE->EN 2024"
+python manage.py glossary_activate 3f056e0e-dcbc-4fed-a983-382015eae522
+```
+
+**Exit codes:**
+- `0` — glossary is now ACTIVE (or was already ACTIVE)
+- `1` — glossary is ORPHANED (not found in DeepL API)
+
+### 4. Remove a Glossary (glossary_remove)
+
+Remove a glossary from the **local database** (default) and optionally also
+from the DeepL API.
+
+**Default behaviour is local-only removal.**  The glossary is untracked locally
+but remains in the DeepL API; it returns to UNTRACKED state and can be
+re-imported via `glossary_list --import` at any time.  This is the safest
+default because other applications sharing the same DeepL account may rely on
+the glossary.
+
+**Syntax:**
+```bash
+python manage.py glossary_remove <name_or_id> [--force] [--also-remove-online]
 ```
 
 **Arguments:**
 - `name_or_id`: Glossary name or DeepL glossary ID
-- `--force`: Skip confirmation prompt (use with caution)
+- `--force`: Skip confirmation prompt (still local-only by default)
+- `--also-remove-online`: Also delete the glossary from the DeepL API
 
 **Examples:**
 ```bash
-# Remove by name (with confirmation prompt)
+# Remove from local DB only (interactive confirmation)
 python manage.py glossary_remove "AWI DE->EN"
 
-# Remove by ID (with confirmation prompt)
-python manage.py glossary_remove 3f056e0e-dcbc-4fed-a983-382015eae522
-
-# Remove without confirmation (for scripts)
+# Remove from local DB only, no prompt (for scripts / CI)
 python manage.py glossary_remove "Old Glossary" --force
+
+# Remove from local DB AND DeepL API, no prompt
+python manage.py glossary_remove "Old Glossary" --force --also-remove-online
 ```
 
-**Sample Output:**
+**Interactive flow (without --force):**
 ```
 Glossary to be removed:
   Name:      AWI DE->EN
-  ID:        3f056e0e-dcbc-4fed-a983-382015eae522
-  Languages: DE -> EN-GB
-  Entries:   150
-  Uploaded:  2025-12-14 10:30:45
-  Filename:  glossary_de_en.csv
-  Comment:   AWI terminology 2025
+  ...
 
-Are you sure you want to remove this glossary? [y/N]: y
+Remove glossary from local database? [y/N]: y
 
-Removing glossary from DeepL API...
-✓ Glossary removed from DeepL API
-Removing glossary from database...
-✓ Glossary removed from database
+This glossary still exists in the DeepL API.
+Other applications using the same DeepL account may rely on it.
+Also remove from DeepL API? [y/N]: n
 
+✓ Glossary removed from local database
 ✓ Glossary 'AWI DE->EN' has been successfully removed!
 ```
 
 **Notes:**
-- If the glossary doesn't exist in DeepL API but exists in the database, it will only be removed from the database
-- If multiple glossaries have the same name, use the glossary ID for removal
+- If the glossary is ORPHANED (not in DeepL), no DeepL prompt is shown
+- If multiple glossaries share the same name, use the glossary ID
 
 ## How Glossaries Are Used
 
@@ -241,11 +273,21 @@ The `Glossary` model stores:
 
 ### Glossary not being used in translations
 1. Check that the glossary is ACTIVE: `python manage.py glossary_list`
+   If it is SHADOWED, promote it with `python manage.py glossary_activate "<name>"`
 2. Language codes are normalised to 2-letter base codes automatically;
    you do **not** need exact regional-variant matches
 3. The cache refreshes automatically after the TTL expires (default 1 hour);
    restart the container to force an immediate reload
 4. Check application logs for errors during glossary loading
+
+### Wrong glossary became ACTIVE after an import
+When a glossary is imported via `glossary_list --import`, its `upload_date` is
+set to now, which may unintentionally shadow an existing active glossary.
+
+To restore the intended state:
+- Run `glossary_activate "<intended-name>"` to promote the correct glossary, **or**
+- Run `glossary_remove "<imported-name>" --force` to un-track the import (it stays
+  in DeepL and can be re-imported later)
 
 ### Upload fails with DeepL API error
 - Verify CSV format matches DeepL specifications

@@ -4381,3 +4381,270 @@ class GlossaryListCommandTest(TestCase):
 
         self.assertFalse(Glossary.objects.filter(glossary_id="remote-id-1").exists())
         self.assertFalse(Glossary.objects.filter(glossary_id="remote-id-2").exists())
+
+
+# ============================================================================
+# Management Command Tests — glossary_remove
+# ============================================================================
+
+class GlossaryRemoveCommandTest(TestCase):
+    """Tests for the updated glossary_remove management command.
+
+    Default behaviour is local-only removal (no DeepL API call).
+    --also-remove-online opts in to DeepL deletion.
+    Interactive path prompts for DeepL removal when glossary exists there.
+    """
+
+    def setUp(self):
+        self.glossary = Glossary.objects.create(
+            glossary_id="remove-test-id",
+            name="Remove Test Glossary",
+            source_lang="DE",
+            target_lang="EN-GB",
+            original_filename="remove_test.csv",
+            comment="For removal tests",
+            entry_count=10,
+        )
+
+    def _make_deepl_glossary(self, glossary_id):
+        g = MagicMock()
+        g.glossary_id = glossary_id
+        return g
+
+    def test_force_removes_db_only_no_api_call(self):
+        """--force removes from DB without touching the DeepL API."""
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id", "--force",
+            stdout=StringIO(), stderr=StringIO(),
+        )
+        self.assertFalse(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+
+    @patch("deeplFrontend.management.commands.glossary_remove.deepl.Translator")
+    def test_force_with_also_remove_online_removes_both(self, mock_translator_cls):
+        """--force --also-remove-online removes from DB and calls DeepL delete."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.get_glossary.return_value = self._make_deepl_glossary("remove-test-id")
+
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id",
+            "--force", "--also-remove-online",
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+        mock_tr.delete_glossary.assert_called_once()
+
+    @patch("deeplFrontend.management.commands.glossary_remove.deepl.Translator")
+    @patch("builtins.input")
+    def test_interactive_accept_local_only(self, mock_input, mock_translator_cls):
+        """Interactive path: confirm removal, answer N to DeepL → DB-only removal."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.get_glossary.return_value = self._make_deepl_glossary("remove-test-id")
+        # First input: confirm local removal; second: decline DeepL removal
+        mock_input.side_effect = ["y", "n"]
+
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id",
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+        mock_tr.delete_glossary.assert_not_called()
+
+    @patch("deeplFrontend.management.commands.glossary_remove.deepl.Translator")
+    @patch("builtins.input")
+    def test_interactive_accept_also_remove_online(self, mock_input, mock_translator_cls):
+        """Interactive path: confirm removal, answer Y to DeepL → removes both."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.get_glossary.return_value = self._make_deepl_glossary("remove-test-id")
+        mock_input.side_effect = ["y", "y"]
+
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id",
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+        mock_tr.delete_glossary.assert_called_once()
+
+    @patch("builtins.input")
+    def test_interactive_cancel_leaves_db_intact(self, mock_input):
+        """Interactive path: answering N to confirmation leaves DB unchanged."""
+        mock_input.return_value = "n"
+
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id",
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertTrue(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+
+    @patch("deeplFrontend.management.commands.glossary_remove.deepl.Translator")
+    def test_also_remove_online_graceful_when_orphaned(self, mock_translator_cls):
+        """--also-remove-online with an orphaned glossary prints a warning, not an error."""
+        import deepl as _deepl
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.get_glossary.side_effect = _deepl.DeepLException("404 not found")
+
+        out = StringIO()
+        from django.core.management import call_command
+        call_command(
+            "glossary_remove", "remove-test-id",
+            "--force", "--also-remove-online",
+            stdout=out, stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Glossary.objects.filter(glossary_id="remove-test-id").exists()
+        )
+        self.assertIn("not found", out.getvalue().lower())
+
+    def test_not_found_raises_command_error(self):
+        """Removal of a non-existent glossary raises CommandError."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command(
+                "glossary_remove", "no-such-id",
+                "--force", stdout=StringIO(),
+            )
+
+
+# ============================================================================
+# Management Command Tests — glossary_activate
+# ============================================================================
+
+class GlossaryActivateCommandTest(TestCase):
+    """Tests for the glossary_activate management command."""
+
+    def setUp(self):
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        self.older = Glossary.objects.create(
+            glossary_id="activate-old-id",
+            name="Old DE->EN",
+            source_lang="DE",
+            target_lang="EN",
+            original_filename="old.csv",
+            entry_count=30,
+        )
+        Glossary.objects.filter(pk=self.older.pk).update(
+            upload_date=tz.now() - timedelta(days=10)
+        )
+        self.newer = Glossary.objects.create(
+            glossary_id="activate-new-id",
+            name="New DE->EN",
+            source_lang="DE",
+            target_lang="EN-GB",
+            original_filename="new.csv",
+            entry_count=60,
+        )
+        # newer has upload_date=now so it is ACTIVE
+
+    def _patch_deepl_ok(self, glossary_id):
+        """Return a context manager that makes get_glossary succeed."""
+        mock_tr = MagicMock()
+        mock_g = MagicMock()
+        mock_g.glossary_id = glossary_id
+        mock_tr.get_glossary.return_value = mock_g
+        return patch(
+            "deeplFrontend.management.commands.glossary_activate.deepl.Translator",
+            return_value=mock_tr,
+        )
+
+    def _patch_deepl_orphaned(self):
+        """Return a context manager that makes get_glossary raise a 404."""
+        import deepl as _deepl
+        mock_tr = MagicMock()
+        mock_tr.get_glossary.side_effect = _deepl.DeepLException("404 not found")
+        return patch(
+            "deeplFrontend.management.commands.glossary_activate.deepl.Translator",
+            return_value=mock_tr,
+        )
+
+    def test_activates_shadowed_glossary(self):
+        """A SHADOWED glossary becomes ACTIVE after glossary_activate."""
+        from django.utils import timezone as tz
+        from django.core.management import call_command
+
+        with self._patch_deepl_ok("activate-old-id"):
+            call_command(
+                "glossary_activate", "activate-old-id",
+                stdout=StringIO(), stderr=StringIO(),
+            )
+
+        # After activation, older's upload_date should be the newest
+        self.older.refresh_from_db()
+        self.newer.refresh_from_db()
+        self.assertGreater(self.older.upload_date, self.newer.upload_date)
+
+    def test_already_active_no_change(self):
+        """Running glossary_activate on an already-ACTIVE glossary changes nothing."""
+        from django.core.management import call_command
+
+        original_date = self.newer.upload_date
+
+        out = StringIO()
+        with self._patch_deepl_ok("activate-new-id"):
+            call_command(
+                "glossary_activate", "activate-new-id",
+                stdout=out, stderr=StringIO(),
+            )
+
+        self.newer.refresh_from_db()
+        self.assertEqual(self.newer.upload_date, original_date)
+        self.assertIn("already ACTIVE", out.getvalue())
+
+    def test_orphaned_glossary_exits_nonzero(self):
+        """Activating an ORPHANED glossary exits with code 1."""
+        from django.core.management import call_command
+
+        with self._patch_deepl_orphaned():
+            with self.assertRaises(SystemExit) as ctx:
+                call_command(
+                    "glossary_activate", "activate-old-id",
+                    stdout=StringIO(), stderr=StringIO(),
+                )
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_not_found_raises_command_error(self):
+        """Activating a non-existent glossary raises CommandError."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command(
+                "glossary_activate", "no-such-id",
+                stdout=StringIO(),
+            )
+
+    def test_activate_shows_shadowed_entries(self):
+        """Output lists any glossaries that become SHADOWED after activation."""
+        from django.core.management import call_command
+
+        out = StringIO()
+        with self._patch_deepl_ok("activate-old-id"):
+            call_command(
+                "glossary_activate", "activate-old-id",
+                stdout=out, stderr=StringIO(),
+            )
+
+        self.assertIn("SHADOWED", out.getvalue())
