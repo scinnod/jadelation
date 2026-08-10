@@ -9,10 +9,10 @@ This document describes how to manage DeepL glossaries using Django management c
 
 ## Overview
 
-Glossaries allow you to customize DeepL translations with domain-specific terminology. The system provides three management commands to handle glossary operations:
+Glossaries allow you to customize DeepL translations with domain-specific terminology. The system provides four management commands to handle glossary operations:
 
 - `glossary_put` - Upload a new glossary
-- `glossary_list` - List all glossaries
+- `glossary_list` - List all glossaries with full sync status (ACTIVE / SHADOWED / ORPHANED / UNTRACKED)
 - `glossary_remove` - Remove a glossary
 
 All glossaries are stored both in the DeepL API and in the local database for tracking purposes.
@@ -59,61 +59,91 @@ Wissenschaft,science
 
 **Notes:**
 - If database storage fails, the command automatically attempts to delete the glossary from DeepL to maintain consistency
-- The glossary is immediately available for translations after upload (requires application restart to load)
+- The glossary takes effect in the running application after the cache refreshes (within `GLOSSARY_CACHE_TTL` seconds, default 1 hour); no restart needed
 
-### 2. List Glossaries (glossary_list)
+### 2. List Glossaries with Status (glossary_list)
 
-Display all glossaries stored in the database with their metadata.
+List every glossary known to either the local database or the DeepL API,
+classified into one of four states:
+
+| State | Meaning |
+|-------|---------|
+| **ACTIVE** | In DB, present in DeepL API, newest for its language pair → **will be used** |
+| **SHADOWED** | In DB and DeepL API, but superseded by a newer upload for the same pair → won't be used |
+| **ORPHANED** | In DB, but absent from DeepL API → broken; clean up with `glossary_remove` |
+| **UNTRACKED** | In DeepL API only, not in local DB → the app will **never** use it |
+
+The state logic mirrors the runtime `_GlossaryCache` exactly, so the output
+reflects what the application will actually do at translation time.
 
 **Syntax:**
 ```bash
-python manage.py glossary_list [--verbose] [--sync]
+python manage.py glossary_list [--verbose] [--import]
 ```
 
 **Options:**
-- `--verbose`: Show detailed information for each glossary
-- `--sync`: Check DeepL API for orphaned entries (glossaries in DB but not in DeepL)
+- `--verbose`: Show detailed information (ready flag, entry counts, upload date, comment)
+- `--import`: Interactively prompt to import UNTRACKED glossaries into the local DB
+
+**Exit codes:**
+- `0` — all good (only ACTIVE and/or SHADOWED glossaries)
+- `1` — at least one ORPHANED or UNTRACKED glossary found (suitable for monitoring/CI)
 
 **Examples:**
 ```bash
-# List all glossaries (compact view)
+# Standard list and status check
 python manage.py glossary_list
 
-# List with detailed information
+# Detailed output
 python manage.py glossary_list --verbose
 
-# List and check for sync issues
-python manage.py glossary_list --sync
+# Discover and optionally import DeepL-side glossaries not yet tracked locally
+python manage.py glossary_list --import
 ```
 
 **Sample Output (compact):**
 ```
-Found 2 glossaries:
+DB glossaries (2):
 
-1. AWI DE->EN                                [DE->EN-GB]     150 entries  (5d ago)      ID: 3f056e0e-dcbc-4fed-a983-382015eae522
-2. Technical Terms EN->DE                    [EN->DE    ]     85 entries  (12d ago)     ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+   1. [ACTIVE   ] AWI DE->EN                           [DE->EN-GB]   150 entries  (5d ago)
+   2. [ACTIVE   ] Technical Terms EN->DE               [EN->DE   ]    85 entries  (12d ago)
+
+No UNTRACKED glossaries in DeepL API.
+
+Summary: 2 ACTIVE, 0 SHADOWED, 0 ORPHANED, 0 UNTRACKED
 ```
 
 **Sample Output (verbose):**
 ```
-Found 2 glossaries:
+DB glossaries (1):
 
-1. AWI DE->EN
-   ID:        3f056e0e-dcbc-4fed-a983-382015eae522
-   Languages: DE -> EN-GB
-   Entries:   150
-   Uploaded:  2025-12-14 10:30:45
-   Filename:  glossary_de_en.csv
-   Comment:   AWI terminology 2025
-
-2. Technical Terms EN->DE
-   ID:        a1b2c3d4-e5f6-7890-abcd-ef1234567890
-   Languages: EN -> DE
-   Entries:   85
-   Uploaded:  2025-12-07 15:22:10
-   Filename:  terms.csv
-   Comment:   Technical documentation terms
+   1. [ACTIVE   ] AWI DE->EN
+          ID:       3f056e0e-dcbc-4fed-a983-382015eae522
+          Langs:    DE -> EN-GB
+          Entries:  150 (DB) / 150 (DeepL)
+          Ready:    True
+          Uploaded: 2025-12-14 10:30:45
+          File:     glossary_de_en.csv
+          Comment:  AWI terminology 2025
 ```
+
+**Interactive import (`--import`):**
+
+For each UNTRACKED glossary the command prompts:
+```
+  Name:     Remote Glossary
+  ID:       3f056e0e-...
+  Langs:    EN -> DE
+  Entries:  85
+  Ready:    True
+
+  Import into local database? [y/N/q]: y
+  Add a comment (leave blank to skip): Imported from DeepL, created by team X
+  ✓ Imported 'Remote Glossary' into local database.
+```
+
+The `original_filename` field is set to `(imported from DeepL API)` since the
+original CSV file is not retrievable from the DeepL API.
 
 ### 3. Remove a Glossary (glossary_remove)
 
@@ -173,8 +203,9 @@ application startup.  The `_GlossaryCache` singleton in `views.py` reads all
 fetches each `GlossaryInfo` from the DeepL API, and stores them in an
 in-memory dict keyed by normalised 2-letter language codes (e.g. `DE->EN`).
 
-The cache **auto-refreshes** after a configurable TTL (default: 10 minutes,
-configurable via `GLOSSARY_CACHE_TTL` in seconds in `settings.py`).
+The cache **auto-refreshes** after a configurable TTL (default: 1 hour / 3600 seconds,
+configurable via `GLOSSARY_CACHE_TTL` in seconds in `settings.py` or the
+`GLOSSARY_CACHE_TTL` environment variable).
 
 ### Language-code normalisation
 
@@ -209,11 +240,11 @@ The `Glossary` model stores:
 ## Troubleshooting
 
 ### Glossary not being used in translations
-1. Check that the glossary exists: `python manage.py glossary_list`
+1. Check that the glossary is ACTIVE: `python manage.py glossary_list`
 2. Language codes are normalised to 2-letter base codes automatically;
    you do **not** need exact regional-variant matches
-3. The cache refreshes automatically after the TTL expires (default
-   10 min); you can also restart the container to force a reload
+3. The cache refreshes automatically after the TTL expires (default 1 hour);
+   restart the container to force an immediate reload
 4. Check application logs for errors during glossary loading
 
 ### Upload fails with DeepL API error
@@ -222,8 +253,15 @@ The `Glossary` model stores:
 - Ensure DeepL API key has glossary creation permissions
 - Check DeepL API quota limits
 
-### Orphaned glossaries (in DB but not in DeepL)
-Run `python manage.py glossary_list --sync` to identify orphaned entries, then remove them using `glossary_remove`.
+### Glossaries out of sync between DB and DeepL API
+Run `python manage.py glossary_list` for a full picture: it shows ACTIVE,
+SHADOWED, ORPHANED, and UNTRACKED glossaries in one view and exits with code 1
+if any action is needed.
+
+For ORPHANED entries (in DB but absent from DeepL): remove them with `glossary_remove`.
+
+For UNTRACKED entries (in DeepL but not in the local DB): the app will never use
+them.  Run `python manage.py glossary_list --import` to register them locally.
 
 ## Best Practices
 
@@ -232,7 +270,7 @@ Run `python manage.py glossary_list --sync` to identify orphaned entries, then r
 3. **Version Control**: Keep CSV files in version control for reproducibility
 4. **Backup**: Regularly backup the database to preserve glossary metadata
 5. **Testing**: Test glossaries with sample translations before deploying to production
-6. **Monitoring**: Use `--sync` option periodically to check for consistency issues
+6. **Monitoring**: Run `glossary_list` periodically (or in CI) to verify consistency; its exit code makes it easy to alert on problems
 
 ## Example Workflow
 

@@ -4034,3 +4034,350 @@ class DocTranslationHelperTest(TestCase):
             req.session = {}
             self.assertFalse(_is_doc_translation_enabled(req))
 
+
+# ============================================================================
+# Management Command Tests — glossary_list
+# ============================================================================
+
+class GlossaryListCommandTest(TestCase):
+    """Tests for the merged glossary_list management command.
+
+    glossary_list always contacts the DeepL API and classifies every
+    glossary as ACTIVE, SHADOWED, ORPHANED, or UNTRACKED.
+    """
+
+    def setUp(self):
+        self.db_de_en = Glossary.objects.create(
+            glossary_id="db-de-en-id",
+            name="DE->EN Glossary",
+            source_lang="DE",
+            target_lang="EN-GB",
+            original_filename="de_en.csv",
+            comment="Test DE->EN",
+            entry_count=100,
+        )
+        self.db_en_de = Glossary.objects.create(
+            glossary_id="db-en-de-id",
+            name="EN->DE Glossary",
+            source_lang="EN",
+            target_lang="DE",
+            original_filename="en_de.csv",
+            comment="Test EN->DE",
+            entry_count=80,
+        )
+
+    def _make_deepl_glossary(
+        self, glossary_id, name, source_lang, target_lang,
+        entry_count=10, ready=True,
+    ):
+        """Return a mock GlossaryInfo-like object."""
+        g = MagicMock()
+        g.glossary_id = glossary_id
+        g.name = name
+        g.source_lang = source_lang
+        g.target_lang = target_lang
+        g.entry_count = entry_count
+        g.ready = ready
+        return g
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_active_glossaries_shown(self, mock_translator_cls):
+        """Glossaries present in both DB and DeepL are labelled ACTIVE."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        call_command("glossary_list", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("ACTIVE", output)
+        self.assertNotIn("ORPHANED", output)
+        self.assertNotIn("UNTRACKED", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_all_active_exits_zero(self, mock_translator_cls):
+        """Exit code 0 when all glossaries are ACTIVE."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        from django.core.management import call_command
+        try:
+            call_command("glossary_list", stdout=StringIO())
+        except SystemExit as e:
+            self.fail(
+                f"glossary_list raised SystemExit({e.code}) "
+                "unexpectedly; expected clean exit"
+            )
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_orphaned_glossary_detected(self, mock_translator_cls):
+        """DB glossary absent from DeepL is labelled ORPHANED; exit code 1."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        # Only one of the two DB glossaries is present in DeepL
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        with self.assertRaises(SystemExit) as ctx:
+            call_command("glossary_list", stdout=out, stderr=StringIO())
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("ORPHANED", out.getvalue())
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_shadowed_glossary_detected(self, mock_translator_cls):
+        """Older duplicate for the same normalised pair is labelled SHADOWED."""
+        from django.utils import timezone as tz
+        from datetime import timedelta
+
+        # Make db_de_en the newer entry
+        Glossary.objects.filter(pk=self.db_de_en.pk).update(upload_date=tz.now())
+        older = Glossary.objects.create(
+            glossary_id="older-de-en-id",
+            name="Old DE->EN Glossary",
+            source_lang="DE",
+            target_lang="EN",       # normalises to DE->EN, same as db_de_en
+            original_filename="old.csv",
+            entry_count=50,
+        )
+        Glossary.objects.filter(pk=older.pk).update(
+            upload_date=tz.now() - timedelta(days=1)
+        )
+
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("older-de-en-id", "Old DE->EN Glossary", "DE", "EN", 50),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        call_command("glossary_list", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("SHADOWED", output)
+        self.assertIn("ACTIVE", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_untracked_glossary_detected(self, mock_translator_cls):
+        """DeepL glossary absent from local DB is labelled UNTRACKED; exit code 1."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+            self._make_deepl_glossary("remote-only-id", "Remote Only", "FR", "DE", 20),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        with self.assertRaises(SystemExit) as ctx:
+            call_command("glossary_list", stdout=out, stderr=StringIO())
+        self.assertEqual(ctx.exception.code, 1)
+        output = out.getvalue()
+        self.assertIn("UNTRACKED", output)
+        self.assertIn("Remote Only", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_warns_both_orphaned_and_untracked(self, mock_translator_cls):
+        """Both ORPHANED and UNTRACKED entries are shown simultaneously."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        # db_de_en is in DeepL; db_en_de is not → orphaned
+        # remote-only is in DeepL but not in DB → untracked
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("remote-only-id", "Remote Glossary", "FR", "DE", 5),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        with self.assertRaises(SystemExit) as ctx:
+            call_command("glossary_list", stdout=out, stderr=StringIO())
+        self.assertEqual(ctx.exception.code, 1)
+        output = out.getvalue()
+        self.assertIn("ORPHANED", output)
+        self.assertIn("UNTRACKED", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_verbose_shows_detail(self, mock_translator_cls):
+        """--verbose output includes Uploaded, Comment, and Ready fields."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        call_command("glossary_list", "--verbose", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("Uploaded:", output)
+        self.assertIn("Comment:", output)
+        self.assertIn("Ready:", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_verbose_untracked_shows_id_and_langs(self, mock_translator_cls):
+        """--verbose output for UNTRACKED entries includes ID and language pair."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("remote-only-id", "Remote Glossary", "FR", "DE", 25),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        with self.assertRaises(SystemExit):
+            call_command("glossary_list", "--verbose", stdout=out, stderr=StringIO())
+        output = out.getvalue()
+
+        self.assertIn("remote-only-id", output)
+        self.assertIn("FR", output)
+        self.assertIn("25", output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_api_error_raises_command_error(self, mock_translator_cls):
+        """DeepL API failure raises CommandError (not an unhandled exception)."""
+        import deepl as _deepl
+        from django.core.management.base import CommandError
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.side_effect = _deepl.DeepLException("API Error")
+
+        from django.core.management import call_command
+        with self.assertRaises(CommandError):
+            call_command("glossary_list", stdout=StringIO())
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_no_db_glossaries_shows_untracked(self, mock_translator_cls):
+        """Works correctly when there are no DB glossaries; DeepL-only entries shown."""
+        Glossary.objects.all().delete()
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("remote-id", "Remote Only", "DE", "EN", 5),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        with self.assertRaises(SystemExit) as ctx:
+            call_command("glossary_list", stdout=out, stderr=StringIO())
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("UNTRACKED", out.getvalue())
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_empty_db_and_empty_deepl_exits_zero(self, mock_translator_cls):
+        """No glossaries anywhere: no problems, exit code 0."""
+        Glossary.objects.all().delete()
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = []
+
+        from django.core.management import call_command
+        try:
+            call_command("glossary_list", stdout=StringIO())
+        except SystemExit as e:
+            self.fail(f"glossary_list raised SystemExit({e.code}) with empty state")
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    def test_summary_line_present(self, mock_translator_cls):
+        """Summary line is always present and contains all four state names."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+        ]
+
+        out = StringIO()
+        from django.core.management import call_command
+        call_command("glossary_list", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("Summary:", output)
+        for state in ("ACTIVE", "SHADOWED", "ORPHANED", "UNTRACKED"):
+            self.assertIn(state, output)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    @patch("builtins.input")
+    def test_import_flag_creates_db_record(self, mock_input, mock_translator_cls):
+        """--import creates a DB record for an UNTRACKED glossary when user answers y."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("db-de-en-id", "DE->EN Glossary", "DE", "EN-GB", 100),
+            self._make_deepl_glossary("db-en-de-id", "EN->DE Glossary", "EN", "DE", 80),
+            self._make_deepl_glossary("remote-only-id", "Remote Only", "FR", "DE", 10),
+        ]
+        mock_input.side_effect = ["y", "My import comment"]
+
+        self.assertFalse(Glossary.objects.filter(glossary_id="remote-only-id").exists())
+
+        from django.core.management import call_command
+        try:
+            call_command("glossary_list", "--import", stdout=StringIO(), stderr=StringIO())
+        except SystemExit:
+            pass  # exit 1 expected (UNTRACKED present at start)
+
+        self.assertTrue(Glossary.objects.filter(glossary_id="remote-only-id").exists())
+        imported = Glossary.objects.get(glossary_id="remote-only-id")
+        self.assertEqual(imported.original_filename, "(imported from DeepL API)")
+        self.assertEqual(imported.comment, "My import comment")
+        self.assertEqual(imported.name, "Remote Only")
+        self.assertEqual(imported.source_lang, "FR")
+        self.assertEqual(imported.entry_count, 10)
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    @patch("builtins.input")
+    def test_import_flag_skips_on_no(self, mock_input, mock_translator_cls):
+        """--import does NOT create a DB record when the user answers N."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("remote-only-id", "Remote Only", "FR", "DE", 10),
+        ]
+        mock_input.return_value = "n"
+
+        from django.core.management import call_command
+        try:
+            call_command("glossary_list", "--import", stdout=StringIO(), stderr=StringIO())
+        except SystemExit:
+            pass
+
+        self.assertFalse(Glossary.objects.filter(glossary_id="remote-only-id").exists())
+
+    @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
+    @patch("builtins.input")
+    def test_import_flag_quit_stops_loop(self, mock_input, mock_translator_cls):
+        """--import stops processing further entries when the user answers q."""
+        mock_tr = MagicMock()
+        mock_translator_cls.return_value = mock_tr
+        mock_tr.list_glossaries.return_value = [
+            self._make_deepl_glossary("remote-id-1", "Remote 1", "FR", "DE", 10),
+            self._make_deepl_glossary("remote-id-2", "Remote 2", "ES", "DE", 5),
+        ]
+        mock_input.return_value = "q"
+
+        from django.core.management import call_command
+        try:
+            call_command("glossary_list", "--import", stdout=StringIO(), stderr=StringIO())
+        except SystemExit:
+            pass
+
+        self.assertFalse(Glossary.objects.filter(glossary_id="remote-id-1").exists())
+        self.assertFalse(Glossary.objects.filter(glossary_id="remote-id-2").exists())
