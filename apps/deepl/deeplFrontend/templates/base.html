@@ -14,6 +14,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no">
     
     {# Page title - can be overridden in child templates #}
     {% block title %}
@@ -154,17 +155,8 @@
             
             <span class="px-1">|</span>
             
-            {# Usage statistics links with different granularities #}
-            {% translate "usage statistics" %}:
-            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='d' %}">
-              {% translate "daily" %}
-            </a>-
-            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='m' %}">
-              {% translate "monthly" %}
-            </a>-
-            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='y' %}">
-              {% translate "annually" %}
-            </a>
+            {# Usage statistics link - granularity switching is available on the statistics page #}
+            <a class="link-secondary text-decoration-none" href="{% url 'usage-statistics' granularity='d' %}">{% translate "usage statistics" %}</a>
             
             <span class="px-1">|</span>
             
