@@ -16,7 +16,7 @@ Tests cover:
 import os
 import tempfile
 from datetime import timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
