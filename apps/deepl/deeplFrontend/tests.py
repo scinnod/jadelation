@@ -4095,9 +4095,9 @@ class GlossaryListCommandTest(TestCase):
         call_command("glossary_list", stdout=out)
         output = out.getvalue()
 
-        self.assertIn("ACTIVE", output)
-        self.assertNotIn("ORPHANED", output)
-        self.assertNotIn("UNTRACKED", output)
+        self.assertIn("[ACTIVE", output)
+        self.assertNotIn("[ORPHANED", output)
+        self.assertNotIn("[UNTRACKED", output)
 
     @patch("deeplFrontend.management.commands.glossary_list.deepl.Translator")
     def test_all_active_exits_zero(self, mock_translator_cls):
