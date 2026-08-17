@@ -11,7 +11,7 @@ A privacy-focused web interface for the DeepL translation API, designed for inst
 > 
 > **NEVER expose this service to the public internet without authentication!**
 > 
-> - This service MUST be deployed behind an authentication proxy (e.g., [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack))
+> - This service MUST be deployed behind an authentication proxy (e.g., [Django Auth Stack](https://github.com/scinnod/django-auth-stack))
 > - Only authenticated users from your organization should have access
 > - Unauthorized access could result in significant API costs and quota exhaustion
 > - See the [Authentication](#authentication) section for proper deployment
@@ -30,13 +30,13 @@ This Django-based application provides a user-friendly frontend for DeepL's ente
 
 ## Authentication
 
-This service is designed to work behind the [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack) - a production-ready authentication gateway combining nginx, Keycloak SSO, and OAuth2-proxy.
+This service is designed to work behind the [Django Auth Stack](https://github.com/scinnod/django-auth-stack) - a production-ready authentication gateway combining nginx, Keycloak SSO, and OAuth2-proxy.
 
 ### Prerequisites
 
-1. Deploy the Edge-Auth Stack first
+1. Deploy the Django Auth Stack first
 2. Configure Keycloak realm and client
-3. Set up nginx virtual host (see edge-auth-stack documentation)
+3. Set up nginx virtual host (see Django Auth Stack documentation)
 
 ### Authentication Pattern
 
@@ -46,7 +46,7 @@ This service uses **Pattern B** authentication:
 - Users are already authenticated when requests reach Django (X-Remote-User header)
 - No `@login_required` decorators needed - nginx handles everything
 
-See the [Edge-Auth Stack Django Integration Guide](https://github.com/javidkl/jade-django-0-nginx-auth-stack/blob/main/docs/django-integration.md) for detailed configuration.
+See the [Django Auth Stack documentation](https://github.com/scinnod/django-auth-stack) for detailed configuration.
 
 ### Running Without Authentication (Development)
 
@@ -243,11 +243,11 @@ Access at `http://127.0.0.1:8000`
 
 ## Production Deployment
 
-> ⚠️ **CRITICAL**: Before deploying to production, you MUST set up authentication. Deploy the [Edge-Auth Stack](https://github.com/javidkl/jade-django-0-nginx-auth-stack) first, then connect this service via the shared Docker network.
+> ⚠️ **CRITICAL**: Before deploying to production, you MUST set up authentication. Deploy the [Django Auth Stack](https://github.com/scinnod/django-auth-stack) first, then connect this service via the shared Docker network.
 
 ### Docker + Nginx Setup
 
-1. **Deploy Edge-Auth Stack first** (see [Authentication](#authentication) section)
+1. **Deploy Django Auth Stack first** (see [Authentication](#authentication) section)
 
 2. **Configure environment variables** in `env/deepl.env`:
    - Set `DJANGO_DEBUG=False`
@@ -270,7 +270,7 @@ Access at `http://127.0.0.1:8000`
 
 ### Security Checklist
 
-- [ ] **Authentication proxy deployed** (Edge-Auth Stack or equivalent)
+- [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent)
 - [ ] Service NOT directly accessible from internet
 - [ ] `DEBUG=False` in production
 - [ ] `SECRET_KEY` auto-generated (don't set manually)
@@ -423,6 +423,7 @@ python manage.py migrate
 | [overrides/README.md](overrides/README.md) | Organization-specific customization |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
 | [SECURITY.md](SECURITY.md) | Security policy |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ## Contributing
 
@@ -456,37 +457,4 @@ For issues and questions:
 
 ## Changelog
 
-### Version 2.3 (February 2026)
-- Added automated test suite with pytest (model, form, view, URL, template tag tests)
-- Added GitHub Actions CI workflow (Python 3.11/3.12 matrix)
-- Added test settings, pytest configuration, and test dependencies
-- Added docs/TESTING.md documentation
-- Removed completed TODO.md and LICENSE_INFO_COLLECTION.md
-
-### Version 2.2 (February 2026)
-- Introduced overrides/ directory for organization-specific customization (logo, about texts)
-- Added docker-compose.override.yml.example for transparent override mounting
-- Improved about page texts with clearer benefits and privacy information
-- Removed direct user_files/ volume mounts from docker-compose.yml
-- Moved documentation files into docs/ directory
-
-### Version 2.1 (January 2026)
-- Added corporate identity customization (colors, logo via environment)
-- Added authentication documentation for Edge-Auth Stack integration
-- Added SPDX license headers
-- Improved documentation for GitHub publication
-
-### Version 2.0 (December 2025)
-- Added glossary management system with Django commands
-- Implemented environment-based configuration
-- Enhanced security with production-ready settings
-- Added comprehensive logging
-- Refactored templates for better maintainability
-- Moved to local static assets (Bootstrap, jQuery)
-- Added responsive design improvements
-- Implemented configurable branding
-
-### Version 1.0
-- Initial release with basic translation functionality
-- Usage statistics tracking
-- Multi-language interface support
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
