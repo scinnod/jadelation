@@ -55,10 +55,10 @@ If the service is only reachable inside a trusted network — a corporate intran
 
 In this scenario no application-level authentication proxy is required.
 
-### Running Without Authentication (Development)
+### Local Development
 
-For local development without the auth stack:
-1. Set `DJANGO_DEBUG=True` in your env file
+For local development, no authentication setup is needed — the application itself has none. Simply:
+1. Set `DJANGO_DEBUG=True` in your env file (enables Django's development mode)
 2. Access the service directly at `http://localhost:8000`
 
 ### SSO Logout
