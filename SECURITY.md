@@ -19,13 +19,28 @@ If exposed publicly, malicious actors could:
 - Generate significant costs
 - Use your API key for unauthorized translations
 
-### Required Deployment Architecture
+### Deployment Options
 
+The core requirement is that **unauthenticated access from the public internet must be prevented**. There are several valid ways to achieve this:
+
+**Option A – Authentication proxy (recommended for internet-facing deployments)**
 ```
 Internet → nginx (with auth) → OAuth2-proxy → Keycloak → DeepL Frontend
            ─────────────────────────────────────────────
-                    Authentication Layer (REQUIRED)
+                    Authentication Layer
 ```
+Example: [Django Auth Stack](https://github.com/scinnod/django-auth-stack)
+
+**Option B – Protected Network (VPN or private LAN)**
+```
+VPN / Private LAN → DeepL Frontend
+────────────────────────────────────
+  Network-level access control only
+```
+If the service is only reachable inside a trusted network (e.g. a corporate intranet, a site-to-site VPN, or a home lab), authentication at the application level may not be necessary. Ensure that:
+- The host/container is not reachable from the public internet
+- Network access is restricted to trusted users (e.g. via firewall rules or VPN gateway)
+- You understand the trust model of your network
 
 ## Reporting a Vulnerability
 
@@ -52,11 +67,13 @@ Only the latest version receives security updates.
 
 ## Required Security Measures
 
-### Authentication (MANDATORY)
+### Authentication
 
-1. **Deploy behind Edge-Auth Stack** or equivalent authentication gateway
-2. Never expose this service directly to the internet
-3. Only authenticated users from your organization should have access
+1. **Never expose this service directly to the public internet without access control**
+2. Choose the approach that fits your environment:
+   - **Authentication proxy** (e.g. [Django Auth Stack](https://github.com/scinnod/django-auth-stack)): suitable for internet-facing deployments
+   - **Protected network** (VPN, private LAN, firewall rules): suitable when network-level isolation already restricts access to trusted users
+3. Only users from your organization should be able to reach the service
 
 ### Django Security Settings
 
@@ -83,7 +100,7 @@ Only the latest version receives security updates.
 
 Before deploying to production:
 
-- [ ] Authentication proxy configured and tested
+- [ ] Access control in place (authentication proxy or protected network)
 - [ ] `DEBUG=False` in environment
 - [ ] `ALLOWED_HOSTS` set to your domain only
 - [ ] `CSRF_TRUSTED_ORIGINS` configured

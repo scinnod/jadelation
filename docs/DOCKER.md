@@ -7,7 +7,7 @@ SPDX-FileCopyrightText: 2024-2026 David Kleinhans, Jade University of Applied Sc
 
 This document provides detailed information about the Docker deployment setup for the DeepL Translation Frontend.
 
-> ⚠️ **IMPORTANT**: This service provides access to your DeepL API key. It MUST be deployed behind an authentication proxy. See [SECURITY.md](../SECURITY.md) for details.
+> ⚠️ **IMPORTANT**: This service provides unrestricted access to the DeepL API via your API key. It MUST NOT be exposed to the public internet without access control. See [SECURITY.md](../SECURITY.md) for deployment options (authentication proxy or protected network).
 
 ## Architecture Overview
 

@@ -9,12 +9,12 @@ A privacy-focused web interface for the DeepL translation API, designed for inst
 > 
 > This service provides **unrestricted access to the DeepL API via your API key**. Every translation request uses your API quota and incurs costs.
 > 
-> **NEVER expose this service to the public internet without authentication!**
+> **NEVER expose this service to the public internet without access control!**
 > 
-> - This service MUST be deployed behind an authentication proxy (e.g., [Django Auth Stack](https://github.com/scinnod/django-auth-stack))
-> - Only authenticated users from your organization should have access
+> - Deploy in a **protected network** (VPN, corporate intranet, firewall-restricted LAN) **or** behind an **authentication proxy** (e.g., [Django Auth Stack](https://github.com/scinnod/django-auth-stack))
+> - Only users from your organization should be able to reach the service
 > - Unauthorized access could result in significant API costs and quota exhaustion
-> - See the [Authentication](#authentication) section for proper deployment
+> - See the [Authentication](#authentication) section for deployment options
 
 ## Overview
 
@@ -30,23 +30,30 @@ This Django-based application provides a user-friendly frontend for DeepL's ente
 
 ## Authentication
 
-This service is designed to work behind the [Django Auth Stack](https://github.com/scinnod/django-auth-stack) - a production-ready authentication gateway combining nginx, Keycloak SSO, and OAuth2-proxy.
+The core requirement is to **prevent unauthenticated access from the public internet**. Two deployment models are supported:
 
-### Prerequisites
+### Option A: Authentication Proxy (internet-facing deployments)
 
+Deploy behind [Django Auth Stack](https://github.com/scinnod/django-auth-stack) — a production-ready gateway combining nginx, Keycloak SSO, and OAuth2-proxy.
+
+**Setup:**
 1. Deploy the Django Auth Stack first
 2. Configure Keycloak realm and client
 3. Set up nginx virtual host (see Django Auth Stack documentation)
 
-### Authentication Pattern
-
-This service uses **Pattern B** authentication:
-- **All requests are authenticated at nginx level before reaching Django**
-- No Django-internal authentication implementation required
-- Users are already authenticated when requests reach Django (X-Remote-User header)
-- No `@login_required` decorators needed - nginx handles everything
+**Authentication pattern:** All requests are authenticated at nginx level before reaching Django (X-Remote-User header). No Django-internal authentication or `@login_required` decorators are needed.
 
 See the [Django Auth Stack documentation](https://github.com/scinnod/django-auth-stack) for detailed configuration.
+
+### Option B: Protected Network (VPN / private LAN)
+
+If the service is only reachable inside a trusted network — a corporate intranet, a site-to-site or client VPN, or a home lab — network-level isolation alone may be sufficient. Ensure:
+
+- The host/container is **not** reachable from the public internet (firewall, private VLAN, etc.)
+- Network access is restricted to trusted users via VPN gateway or equivalent
+- You understand and accept the trust model of your network
+
+In this scenario no application-level authentication proxy is required.
 
 ### Running Without Authentication (Development)
 
