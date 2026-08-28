@@ -150,7 +150,8 @@ nano env/deepl.env  # Edit with your settings
 
 Required settings:
 - `DEEPL_AUTHKEY`: Your DeepL API authentication key
-- `DJANGO_ALLOWED_HOSTS`: Comma-separated list of allowed domains
+- `DJANGO_DEBUG`: `True` for local testing, `False` for production
+- `DJANGO_ALLOWED_HOSTS`: Comma-separated list of allowed domains (real domain required when `DEBUG=False`)
 
 **Note**: `DJANGO_SECRET_KEY` is automatically generated on first run and stored securely in a Docker volume. No manual configuration needed!
 
