@@ -106,8 +106,10 @@ volumes:
 # Docker Networks
 # ==============================================================================
 # Setup instructions:
-# 1. Create the shared proxy network: docker network create proxy
-# 2. Connect your nginx proxy manager container to the 'proxy' network
+# 1. Create the external network before starting the stack:
+#      docker network create translation_backend
+#    (required both for local testing and in production)
+# 2. In production, connect your external nginx proxy manager to 'translation_backend'
 # 3. Configure upstream to: http://translation-nginx:8000
 networks:
   translation_backend:

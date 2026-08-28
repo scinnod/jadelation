@@ -135,8 +135,8 @@ See [docs/GLOSSARY_MANAGEMENT.md](docs/GLOSSARY_MANAGEMENT.md) for detailed glos
 ### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
-cd poc-deepl
+git clone https://github.com/scinnod/jadelation.git
+cd jadelation
 ```
 
 ### 2. Configure Environment
@@ -153,6 +153,8 @@ Required settings:
 - `DJANGO_ALLOWED_HOSTS`: Comma-separated list of allowed domains
 
 **Note**: `DJANGO_SECRET_KEY` is automatically generated on first run and stored securely in a Docker volume. No manual configuration needed!
+
+> **Local testing**: The sample env ships with `DJANGO_DEBUG=False`. When `DEBUG=False` and no real domain is configured in `DJANGO_ALLOWED_HOSTS`, Django refuses to start with `ValueError: DJANGO_ALLOWED_HOSTS must be set when DEBUG=False`. This guard exists to catch a production misconfiguration: if you forget to set a real domain, Django would start normally (the Docker health check uses `localhost`) but silently return 400 for every real user request. For local testing, set `DJANGO_DEBUG=True` in `env/deepl.env`.
 
 Optional branding:
 - `APP_TITLE_<LANG>`: Application title per language (`APP_TITLE_EN`, `APP_TITLE_DE`, …)
@@ -186,6 +188,9 @@ See [overrides/README.md](overrides/README.md) for details on what can be custom
 ### 4. Run with Docker Compose
 
 ```bash
+# Create the external Docker network (required once per host; also needed in production)
+docker network create translation_backend
+
 docker-compose up -d
 ```
 
@@ -326,6 +331,15 @@ The application uses SQLite (`db.sqlite3`) as its database:
 - Check `DEEPL_AUTHKEY` is set correctly
 - Check `DJANGO_ALLOWED_HOSTS` includes your domain
 - Review logs: `docker-compose logs deepl`
+
+### `ValueError: DJANGO_ALLOWED_HOSTS must be set when DEBUG=False`
+This error appears when `DJANGO_DEBUG=False` (the sample default) and no real hostname beyond `localhost`/`127.0.0.1` is configured. For local testing, set `DJANGO_DEBUG=True` in `env/deepl.env`. In production, set `DJANGO_ALLOWED_HOSTS` to your actual domain.
+
+### `network translation_backend declared as external, but could not be found`
+The `translation_backend` network must exist before starting the stack — it is used in production to connect an external nginx reverse proxy, but must also be created for local testing:
+```bash
+docker network create translation_backend
+```
 
 ### Translations not working
 - Verify DeepL API key is valid
