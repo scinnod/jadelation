@@ -193,18 +193,6 @@ The application will be available at `http://localhost:8000` (or configured doma
 
 **For detailed Docker documentation**, see [docs/DOCKER.md](docs/DOCKER.md).
 
-### 5. Create Database and Run Migrations
-
-```bash
-docker-compose exec deepl python manage.py migrate
-```
-
-### 6. Collect Static Files
-
-```bash
-docker-compose exec deepl python manage.py collectstatic --noinput
-```
-
 ## Manual Installation (Development)
 
 ### 1. Create Virtual Environment
