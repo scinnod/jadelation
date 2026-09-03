@@ -272,11 +272,10 @@ Access at `http://127.0.0.1:8000`
 ### Security Checklist
 
 - [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent) **or** service restricted to an isolated/trusted network (VPN, corporate intranet, firewall-restricted LAN) — either way, the Django app itself must not be reachable directly, bypassing the proxy or network boundary
-- [ ] `DEBUG=False` in production
-- [ ] `ALLOWED_HOSTS` configured with your domain only
+- [ ] `DJANGO_DEBUG=False` in production
+- [ ] `DJANGO_ALLOWED_HOSTS` configured with your domain only
 - [ ] HTTPS enabled (on upstream proxy)
 - [ ] `CSRF_TRUSTED_ORIGINS` configured for your domain
-- [ ] `DEEPL_AUTHKEY` not in any committed files
 - [ ] Regular database backups configured
 - [ ] Usage statistics page reviewed periodically (built in, no setup required); optionally set a usage/budget limit in your DeepL account to guard against misuse
 
