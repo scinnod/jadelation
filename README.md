@@ -265,16 +265,15 @@ Access at `http://127.0.0.1:8000`
 
 ### Security Checklist
 
-- [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent)
+- [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent) **or** service restricted to an isolated/trusted network (VPN, corporate intranet, firewall-restricted LAN)
 - [ ] Service NOT directly accessible from internet
 - [ ] `DEBUG=False` in production
-- [ ] `SECRET_KEY` auto-generated (don't set manually)
 - [ ] `ALLOWED_HOSTS` configured with your domain only
 - [ ] HTTPS enabled (on upstream proxy)
 - [ ] `CSRF_TRUSTED_ORIGINS` configured for your domain
 - [ ] `DEEPL_AUTHKEY` not in any committed files
 - [ ] Regular database backups configured
-- [ ] DeepL API usage monitoring enabled
+- [ ] Usage statistics page reviewed periodically (built in, no setup required); optionally set a usage/budget limit in your DeepL account to guard against misuse
 
 See [SECURITY.md](SECURITY.md) for detailed security guidance.
 
