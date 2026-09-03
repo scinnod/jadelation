@@ -271,8 +271,7 @@ Access at `http://127.0.0.1:8000`
 
 ### Security Checklist
 
-- [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent) **or** service restricted to an isolated/trusted network (VPN, corporate intranet, firewall-restricted LAN)
-- [ ] Service NOT directly accessible from internet
+- [ ] **Authentication proxy deployed** ([Django Auth Stack](https://github.com/scinnod/django-auth-stack) or equivalent) **or** service restricted to an isolated/trusted network (VPN, corporate intranet, firewall-restricted LAN) — either way, the Django app itself must not be reachable directly, bypassing the proxy or network boundary
 - [ ] `DEBUG=False` in production
 - [ ] `ALLOWED_HOSTS` configured with your domain only
 - [ ] HTTPS enabled (on upstream proxy)
