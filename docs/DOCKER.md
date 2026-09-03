@@ -292,13 +292,18 @@ docker-compose up -d
 cp env/deepl.env.sample env/deepl.env
 nano env/deepl.env  # Edit configuration
 
-# 2. Build and start containers
+# 2. Create the external Docker network (required once per host)
+#    This network is used in production so that an external nginx proxy manager
+#    can reach the translation-nginx container.  It must also exist for local testing.
+docker network create translation_backend
+
+# 3. Build and start containers
 docker-compose up -d
 
-# 3. Check logs
+# 4. Check logs
 docker-compose logs -f
 
-# 4. Verify health
+# 5. Verify health
 docker-compose ps
 ```
 
@@ -420,6 +425,15 @@ docker-compose logs deepl
 # - Invalid configuration
 # - Permission issues
 ```
+
+### `network translation_backend declared as external, but could not be found`
+The external `translation_backend` network must be created before starting the stack. It is shared with an external nginx reverse proxy in production but must exist even for local testing:
+```bash
+docker network create translation_backend
+```
+
+### `ValueError: DJANGO_ALLOWED_HOSTS must be set when DEBUG=False`
+The application refuses to start when `DJANGO_DEBUG=False` (the sample default) and no real hostname beyond `localhost`/`127.0.0.1` is configured. This is a fail-fast guard for a common production misconfiguration: without it, Django would start normally (the Docker health check uses `localhost`) but silently return 400 for every real user request. For local testing, set `DJANGO_DEBUG=True` in `env/deepl.env`. In production, set `DJANGO_ALLOWED_HOSTS` to your actual domain.
 
 ### Secret Key Issues
 ```bash
